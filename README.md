@@ -245,15 +245,7 @@ $$\text{RRF Score} = \frac{1}{60 + \text{Rank}_{\text{FTS}}} + \frac{1}{60 + \te
 
 ---
 
-## 🗺️ Roadmap
 
-| Version | Timeline | Focus |
-| :--- | :--- | :--- |
-| **v1.1** | Q3 2026 | Dynamic workspace-defined tool plugins; virtualenv-scoped packaging to reduce installer size |
-| **v2.0** | Q1 2027 | Collaborative multi-agent teams with split workspaces and shared state |
-| **v3.0** | Q4 2027 | Self-evolution microkernel — autonomously compiles and improves its own backend prompts |
-
----
 
 ## 🐛 Bug Reporting & Support
 
