@@ -1,0 +1,16 @@
+kernel:
+  debug_mode: false
+  log_level: "INFO"
+  max_event_queue_size: 1000
+
+database:
+  path: "data/aloy.db"
+  wal_mode: true
+  cache_size_kb: 64000
+
+security:
+  workspace_root: "workspaces"
+
+telemetry:
+  enabled: true
+  retention_days: 7

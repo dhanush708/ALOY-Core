@@ -1,0 +1,1279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ALOY Dashboard</title>
+    <meta name="description" content="ALOY AI Agent and Conversation System Dashboard">
+    <!-- Premium Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- marked.js for Markdown Rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="/static/css/style.css?v=2">
+</head>
+<body class="theme-dark">
+
+    <div class="dashboard-container">
+        
+        <!-- ========================================== -->
+        <!-- LEFT SIDEBAR: NAVIGATION & HISTORY         -->
+        <!-- ========================================== -->
+        <aside class="sidebar-left" id="sidebar-left">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <span class="logo-icon"><i class="fa-solid fa-microchip"></i></span>
+                    <span class="logo-text">ALOY OS</span>
+                </div>
+                <button class="new-chat-btn" id="new-chat-btn">
+                    <i class="fa-solid fa-plus"></i> New Chat
+                </button>
+                <div class="sidebar-search-box">
+                    <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                    <input type="text" id="search-history" placeholder="Search chats...">
+                </div>
+            </div>
+            
+            <!-- Views Navigation -->
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-item active" data-view="chat"><i class="fa-solid fa-message"></i> Conversations</a>
+                <a href="#" class="nav-item" data-view="projects"><i class="fa-solid fa-folder-open"></i> Projects</a>
+                <a href="#" class="nav-item" data-view="memories"><i class="fa-solid fa-brain"></i> Memories</a>
+                <a href="#" class="nav-item" data-view="research"><i class="fa-solid fa-compass"></i> Research</a>
+                <a href="#" class="nav-item" data-view="agents"><i class="fa-solid fa-robot"></i> Agents</a>
+                <a href="#" class="nav-item" data-view="evolution"><i class="fa-solid fa-chart-line"></i> Evolution</a>
+                <a href="#" class="nav-item" data-view="diagnostics"><i class="fa-solid fa-chart-bar"></i> Diagnostics</a>
+                <a href="#" class="nav-item" data-view="settings"><i class="fa-solid fa-gear"></i> Settings</a>
+                <a href="#" class="nav-item" data-view="about"><i class="fa-solid fa-circle-info"></i> About ALOY</a>
+            </nav>
+
+
+            <!-- Conversations List -->
+            <div class="sidebar-history-section">
+                <h3>Recent Conversations</h3>
+                <div class="history-list" id="history-list">
+                    <!-- Loaded dynamically -->
+                    <div class="history-item-placeholder">Loading sessions...</div>
+                </div>
+            </div>
+            
+            <!-- Workspace Info Slot -->
+            <div class="workspace-info-box">
+                <div class="info-row">
+                    <span class="info-label"><i class="fa-solid fa-briefcase"></i> Workspace</span>
+                    <span class="info-val" id="ws-val">aloy-workspace</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label"><i class="fa-solid fa-diagram-project"></i> Project</span>
+                    <span class="info-val" id="proj-val">ALOY Core</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label"><i class="fa-solid fa-code-branch"></i> Git Branch</span>
+                    <span class="info-val" id="branch-val">master</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label"><i class="fa-solid fa-rocket"></i> Mission</span>
+                    <span class="info-val" id="mission-val">Mission 8</span>
+                </div>
+            </div>
+            
+            <!-- Dhanush Credit Footer -->
+            <div class="user-credit-footer" style="padding: 12px 15px; font-size: 0.75rem; color: #8b9bb4; text-align: center; border-top: 1px solid #2d3b55; margin-top: auto; opacity: 0.9; font-family: 'Inter', sans-serif; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                <i class="fa-solid fa-code" style="color: #4ade80;"></i> Built by <span style="font-weight: 600; color: #ffffff; text-shadow: 0 0 8px rgba(74, 222, 128, 0.2);">Dhanush End-to-End</span>
+            </div>
+        </aside>
+
+        <!-- ========================================== -->
+        <!-- CENTER PANEL: ACTIVE CONTENT               -->
+        <!-- ========================================== -->
+        <main class="center-panel">
+            
+            <!-- Header Status Panel -->
+            <header class="main-header">
+                <div class="header-left">
+                    <button class="sidebar-toggle" id="sidebar-toggle-left" aria-label="Toggle Sidebar">
+                        <i class="fa-solid fa-bars"></i>
+                    </button>
+                    <h1 id="view-title">Conversations</h1>
+                </div>
+                <div class="header-right">
+                    <button class="sidebar-toggle" id="sidebar-toggle-right" aria-label="Toggle Details Panel">
+                        <i class="fa-solid fa-circle-info"></i>
+                    </button>
+                </div>
+            </header>
+
+            <!-- stage wrapper for changing panels -->
+            <div class="stage-container" id="stage-container">
+                
+                <!-- CHAT PANEL -->
+                <section class="stage-view active" id="view-chat">
+                    <div class="chat-messages-container" id="chat-messages">
+                        <div class="welcome-message">
+                            <div class="welcome-icon"><i class="fa-solid fa-terminal"></i></div>
+                            <h2>Welcome to ALOY OS</h2>
+                            <p>An intelligent microkernel-based AI core. Ask a question or start a debugging chain.</p>
+                        </div>
+                    </div>
+                    <div class="chat-input-container">
+                        <form id="chat-form">
+                            <textarea id="chat-input" placeholder="Type a message..." rows="1" required></textarea>
+                            <button type="submit" class="send-btn" id="send-btn">
+                                <i class="fa-solid fa-paper-plane"></i>
+                            </button>
+                        </form>
+                    </div>
+                </section>
+
+                <!-- PROJECTS PANEL -->
+                <section class="stage-view" id="view-projects">
+                    <div class="agent-dashboard">
+                        <div class="dashboard-header">
+                            <div class="header-controls-left">
+                                <h2>Project Workspace Manager</h2>
+                            </div>
+                            <div class="header-controls-right">
+                                <button id="btn-toggle-new-project" class="btn-action-outline">
+                                    <i class="fa-solid fa-plus"></i> Register Project
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Inline Project Registration Form -->
+                        <div id="new-project-form-container" class="session-creator-box" style="display: none;">
+                            <h3>Register New Project</h3>
+                            <div class="creator-form-row">
+                                <div class="form-group">
+                                    <label for="new-proj-name">Project Name</label>
+                                    <input type="text" id="new-proj-name" class="form-input" placeholder="e.g. My FastAPI App">
+                                </div>
+                            </div>
+                            <div class="creator-form-row">
+                                <div class="form-group">
+                                    <label for="new-proj-path">Root Folder Path</label>
+                                    <input type="text" id="new-proj-path" class="form-input" placeholder="e.g. C:\Users\YourName\Desktop\MyProject">
+                                </div>
+                            </div>
+                            <div class="creator-form-row">
+                                <div class="form-group">
+                                    <label for="new-proj-desc">Description (optional)</label>
+                                    <input type="text" id="new-proj-desc" class="form-input" placeholder="Short description...">
+                                </div>
+                            </div>
+                            <div class="creator-form-actions">
+                                <button id="btn-register-project" class="btn-primary">Register Project</button>
+                                <button id="btn-cancel-new-project" class="btn-action-outline" style="margin-left:8px;">Cancel</button>
+                            </div>
+                        </div>
+
+                        <!-- Projects List -->
+                        <div id="projects-list-container" style="margin-top: 16px;">
+                            <div class="empty-list-premium" style="text-align: center; padding: 40px 20px; border: 1px dashed var(--border); border-radius: 12px; background: rgba(255,255,255,0.01);">
+                                <i class="fa-solid fa-folder-open" style="font-size: 2.5rem; color: var(--text-muted); margin-bottom: 12px; display: block;"></i>
+                                <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 4px;">No Projects Registered</div>
+                                <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 16px;">Register a project workspace to enable the autonomous Agent Grid to edit, build, and test your code locally.</div>
+                                <button onclick="document.getElementById('btn-toggle-new-project').click()" class="btn-primary" style="font-size: 0.85rem; padding: 8px 16px; margin: 0 auto; display: flex; align-items: center; gap: 6px;">
+                                    <i class="fa-solid fa-plus"></i> Register Your First Project
+                                </button>
+                            </div>
+                        </div>
+
+                    </div>
+                </section>
+
+                <!-- MEMORIES PANEL -->
+                <section class="stage-view" id="view-memories">
+                    <div class="agent-dashboard">
+                        <div class="dashboard-header">
+                            <div class="header-controls-left">
+                                <h2>Memory Index &amp; Consolidation</h2>
+                                <div id="memory-stats-row" style="display:flex;gap:12px;align-items:center;font-size:0.8rem;color:#8b9bb4;"></div>
+                            </div>
+                            <div class="header-controls-right">
+                                <button id="btn-refresh-memories" class="btn-action-outline">
+                                    <i class="fa-solid fa-rotate"></i> Refresh
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Memory Search Bar -->
+                        <div style="margin: 12px 0; display: flex; gap: 8px;">
+                            <input type="text" id="memory-search-input" class="form-input" style="flex:1;" placeholder="Search memories... (leave empty to list recent)">
+                            <button id="btn-search-memories" class="btn-primary" style="white-space:nowrap;padding: 8px 18px;">
+                                <i class="fa-solid fa-magnifying-glass"></i> Search
+                            </button>
+                        </div>
+
+                        <!-- Memories List -->
+                        <div id="memories-list-container" style="margin-top:8px; max-height: 65vh; overflow-y: auto;">
+                            <div class="empty-list-premium" style="text-align: center; padding: 40px 20px; border: 1px dashed var(--border); border-radius: 12px; background: rgba(255,255,255,0.01);">
+                                <i class="fa-solid fa-brain" style="font-size: 2.5rem; color: var(--text-muted); margin-bottom: 12px; display: block;"></i>
+                                <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 4px;">Memory Index Empty</div>
+                                <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 16px;">Perform queries, chat with ALOY, or run agent sessions to seed episodic and long-term memories.</div>
+                                <button onclick="document.getElementById('btn-refresh-memories').click()" class="btn-primary" style="font-size: 0.85rem; padding: 8px 16px; margin: 0 auto; display: flex; align-items: center; gap: 6px;">
+                                    <i class="fa-solid fa-rotate"></i> Load Recent Memories
+                                </button>
+                            </div>
+                        </div>
+
+                    </div>
+                </section>
+
+                <!-- RESEARCH PANEL -->
+                <section class="stage-view" id="view-research">
+                    <div class="agent-dashboard">
+                        <div class="dashboard-header">
+                            <div class="header-controls-left">
+                                <h2>Knowledge &amp; Research Engine</h2>
+                                <span id="research-cache-badge" style="font-size:0.75rem;color:#8b9bb4;"></span>
+                            </div>
+                        </div>
+
+                        <!-- Query Bar -->
+                        <div style="margin: 12px 0; display: flex; gap: 8px;">
+                            <input type="text" id="research-query-input" class="form-input" style="flex:1;" placeholder="e.g. How does FastAPI dependency injection work?">
+                            <button id="btn-run-research" class="btn-primary" style="white-space:nowrap;padding: 8px 20px;">
+                                <i class="fa-solid fa-compass"></i> Research
+                            </button>
+                        </div>
+
+                        <!-- Research Spinner -->
+                        <div id="research-loading" style="display:none;text-align:center;padding:24px;color:#8b9bb4;">
+                            <i class="fa-solid fa-spinner fa-spin" style="font-size:1.5rem;"></i>
+                            <div style="margin-top:8px;font-size:0.85rem;">Escalating query through 6 knowledge layers...</div>
+                        </div>
+
+                        <!-- Results -->
+                        <div id="research-results-container" style="display:none;">
+                            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+                                <span class="badge-status" id="research-layer-badge" style="font-size:0.75rem;"></span>
+                                <div style="flex:1;background:#1e2a3d;border-radius:4px;height:8px;overflow:hidden;">
+                                    <div id="research-confidence-bar" style="height:100%;background:linear-gradient(90deg,#4ade80,#22d3ee);border-radius:4px;transition:width 0.5s;"></div>
+                                </div>
+                                <span id="research-confidence-val" style="font-size:0.75rem;color:#8b9bb4;"></span>
+                            </div>
+                            <div id="research-answer-box" class="message-bubble-body markdown-content" style="background:#111827;border:1px solid #2d3b55;border-radius:10px;padding:16px;max-height:45vh;overflow-y:auto;"></div>
+                            <div id="research-sources-box" style="margin-top:10px;"></div>
+                        </div>
+
+                        <div id="research-empty" style="text-align:center;padding:48px 0;color:#8b9bb4;">
+                            <i class="fa-solid fa-satellite-dish" style="font-size:2rem;margin-bottom:12px;"></i>
+                            <div>Type a technical question and press Research.</div>
+                            <div style="font-size:0.75rem;margin-top:6px;">ALOY escalates through 6 information layers: Memory → Workspace → Docs → Web → Community</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- AGENT DASHBOARD -->
+                <section class="stage-view" id="view-agents">
+                    <div class="agent-dashboard">
+                        <!-- Top Session Control Panel -->
+                        <div class="agent-header-stack">
+                            <!-- Row 1: Session Selector + New Session toggle -->
+                            <div class="agent-header-row">
+                                <h2 class="agent-title">Agent Grid</h2>
+                                <div class="agent-session-picker">
+                                    <select id="agent-session-select" class="form-select agent-session-select">
+                                        <option value="">-- Select Session --</option>
+                                    </select>
+                                    <button id="btn-toggle-new-session" class="btn-action-outline">
+                                        <i class="fa-solid fa-plus"></i> New Session
+                                    </button>
+                                </div>
+                            </div>
+                            <!-- Row 2: Playback controls (only shown when session active) -->
+                            <div class="agent-controls-row" id="session-action-controls">
+                                <button id="btn-pause-agent" class="btn-ctrl" disabled>
+                                    <i class="fa-solid fa-pause"></i> Pause
+                                </button>
+                                <button id="btn-resume-agent" class="btn-ctrl" disabled>
+                                    <i class="fa-solid fa-play"></i> Resume
+                                </button>
+                                <button id="btn-cancel-agent" class="btn-ctrl btn-danger" disabled>
+                                    <i class="fa-solid fa-stop"></i> Cancel
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Session Creator Form (Hidden by default) -->
+                        <div id="new-session-form-container" class="session-creator-box" style="display: none;">
+                            <h3>Create New Agent Session</h3>
+                            <div class="creator-form-row">
+                                <div class="form-group">
+                                    <label for="new-session-project">Target Project Workspace</label>
+                                    <div style="display:flex;gap:8px;align-items:center;">
+                                        <select id="new-session-project" class="form-select" style="flex:1;">
+                                            <option value="">-- Choose Project --</option>
+                                        </select>
+                                        <button id="btn-inline-register-project" type="button" class="btn-action-outline" style="white-space:nowrap;font-size:0.8rem;padding:6px 12px;" title="Register a new project folder">
+                                            <i class="fa-solid fa-folder-plus"></i> Add
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Inline mini-form to register a new project without leaving page -->
+                            <div id="inline-project-reg-form" style="display:none;background:#111827;border:1px solid #2d3b55;border-radius:8px;padding:12px;margin:8px 0;">
+                                <div style="font-size:0.8rem;color:#8b9bb4;margin-bottom:8px;"><i class="fa-solid fa-folder-plus"></i> Register New Project</div>
+                                <div style="display:flex;gap:8px;margin-bottom:6px;">
+                                    <input type="text" id="inline-proj-name" class="form-input" placeholder="Project name (e.g. MyApp)" style="flex:1;">
+                                    <input type="text" id="inline-proj-path" class="form-input" placeholder="Root path (e.g. C:\Users\...\MyApp)" style="flex:2;">
+                                </div>
+                                <div style="display:flex;gap:8px;">
+                                    <button id="btn-save-inline-project" type="button" class="btn-primary" style="font-size:0.8rem;padding:6px 14px;">Save &amp; Select</button>
+                                    <button id="btn-cancel-inline-project" type="button" class="btn-action-outline" style="font-size:0.8rem;padding:6px 12px;">Cancel</button>
+                                </div>
+                            </div>
+
+                            <div class="creator-form-row">
+                                <div class="form-group">
+                                    <label for="new-session-goal">Orchestration Goal</label>
+                                    <textarea id="new-session-goal" class="form-input" rows="2" placeholder="e.g. Implement a bubble sort algorithm in sort.py and add corresponding pytest cases in tests/test_sort.py"></textarea>
+                                </div>
+                            </div>
+                            <div class="creator-form-actions">
+                                <button id="btn-start-session" class="btn-primary">Initialize &amp; Run Agent Grid</button>
+                            </div>
+                        </div>
+
+                        <!-- Active Session Details Display -->
+                        <div class="active-session-meta-box">
+                            <div class="meta-col">
+                                <span class="meta-label">Selected Goal:</span>
+                                <span id="active-agent-goal-display" class="meta-val">No active session selected</span>
+                            </div>
+                            <div class="meta-col-right">
+                                <span class="meta-label">FSM State:</span>
+                                <span id="active-agent-status-badge" class="badge-status status-gray">Idle</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Dynamic Status Grid -->
+                        <div class="agent-status-grid">
+                            <div class="agent-card" id="agent-card-manager"><div class="dot gray"></div> Manager</div>
+                            <div class="agent-card" id="agent-card-planner"><div class="dot gray"></div> Planner</div>
+                            <div class="agent-card" id="agent-card-architect"><div class="dot gray"></div> Architect</div>
+                            <div class="agent-card" id="agent-card-coder"><div class="dot gray"></div> Coder</div>
+                            <div class="agent-card" id="agent-card-tester"><div class="dot gray"></div> Tester</div>
+                            <div class="agent-card" id="agent-card-debugger"><div class="dot gray"></div> Debugger</div>
+                            <div class="agent-card" id="agent-card-reviewer"><div class="dot gray"></div> Reviewer</div>
+                            <div class="agent-card" id="agent-card-documenter"><div class="dot gray"></div> Documenter</div>
+                            <div class="agent-card" id="agent-card-learner"><div class="dot gray"></div> Learner</div>
+                        </div>
+                        <!-- Task Queue & Logs/Recovery Split Column -->
+                        <div class="layout-flex">
+                            <div class="task-queue-box">
+                                <h3>Task Execution Queue</h3>
+                                <div id="agent-task-list" class="task-list-container">
+                                    <div class="empty-list-premium" style="text-align: center; padding: 30px 15px; border: 1px dashed var(--border); border-radius: 8px; background: rgba(255,255,255,0.01);">
+                                        <i class="fa-solid fa-list-check" style="font-size: 2.5rem; color: var(--text-muted); margin-bottom: 12px; display: block;"></i>
+                                        <div style="font-weight: 600; font-size: 0.9rem; margin-bottom: 4px;">Queue Idle</div>
+                                        <div style="font-size: 0.78rem; color: var(--text-muted);">No active tasks running. Select or initialize an Agent Session above to monitor local file executions.</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="agent-logs-box">
+                                <div class="box-tabs">
+                                    <button class="box-tab active" id="tab-btn-logs" data-tab="logs">Terminal Events</button>
+                                    <button class="box-tab" id="tab-btn-checkpoints" data-tab="checkpoints">Checkpoints & Rollbacks</button>
+                                </div>
+                                <div class="tab-content active" id="tab-content-logs">
+                                    <div id="agent-event-logs" class="terminal-logs">System idle. Select or create an agent session to begin monitoring workflow...</div>
+                                </div>
+                                <div class="tab-content" id="tab-content-checkpoints" style="display: none;">
+                                    <div id="agent-checkpoints-list" class="checkpoints-list-container">
+                                        <div class="empty-list">No checkpoints recorded for the active session.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- EVOLUTION PANEL -->
+                <section class="stage-view" id="view-evolution">
+                    <div class="evolution-dashboard">
+                        <div class="dashboard-header">
+                            <h2>Self-Evolution Engine</h2>
+                            <span class="badge-not-available">Placeholder UI Layout (Mission 15)</span>
+                        </div>
+                        <div class="proposal-box">
+                            <h3>Active System Proposals</h3>
+                            <div class="empty-list-premium" style="text-align: center; padding: 40px 20px; border: 1px dashed var(--border); border-radius: 12px; background: rgba(255,255,255,0.01);">
+                                <i class="fa-solid fa-chart-line" style="font-size: 2.5rem; color: var(--text-muted); margin-bottom: 12px; display: block;"></i>
+                                <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 4px;">No Optimization Proposals</div>
+                                <div style="font-size: 0.8rem; color: var(--text-muted);">The evolution engine automatically analyzes agent feedback, latency gains, and memory decay to propose self-refactoring chains. Currently, all metrics are optimal.</div>
+                            </div>
+                        </div>
+
+                        <div class="evolution-stats-grid">
+                            <div class="stat-card"><h3>Memory Decay</h3><p>N/A</p></div>
+                            <div class="stat-card"><h3>Model Latency</h3><p>N/A</p></div>
+                            <div class="stat-card"><h3>Refactoring Gains</h3><p>N/A</p></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- DIAGNOSTICS PANEL -->
+                <section class="stage-view" id="view-diagnostics">
+                    <div class="agent-dashboard" style="max-height: 80vh; overflow-y: auto; padding-right: 10px;">
+                        <div class="dashboard-header" style="margin-bottom: 20px;">
+                            <h2>Diagnostics &amp; Subsystem Health</h2>
+                        </div>
+                        
+                        <!-- System Resource Status Cards -->
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 25px;">
+                            <div class="stat-card" style="display: flex; flex-direction: column; justify-content: space-between;">
+                                <h3><i class="fa-solid fa-cpu" style="color: var(--accent); margin-right: 8px;"></i> CPU Load</h3>
+                                <div style="display: flex; align-items: baseline; gap: 8px; margin: 10px 0;">
+                                    <span id="diag-cpu-val" style="font-size: 1.8rem; font-weight: 700;">0%</span>
+                                </div>
+                                <div style="background: rgba(255,255,255,0.06); height: 6px; border-radius: 3px; overflow: hidden;">
+                                    <div id="diag-cpu-bar" style="width: 0%; height: 100%; background: var(--accent); transition: width 0.5s;"></div>
+                                </div>
+                            </div>
+                            
+                            <div class="stat-card" style="display: flex; flex-direction: column; justify-content: space-between;">
+                                <h3><i class="fa-solid fa-memory" style="color: var(--accent); margin-right: 8px;"></i> System RAM</h3>
+                                <div style="display: flex; align-items: baseline; gap: 8px; margin: 10px 0;">
+                                    <span id="diag-ram-val" style="font-size: 1.8rem; font-weight: 700;">0 GB</span>
+                                    <span id="diag-ram-total" style="font-size: 0.8rem; color: var(--text-muted);">/ 0 GB</span>
+                                </div>
+                                <div style="background: rgba(255,255,255,0.06); height: 6px; border-radius: 3px; overflow: hidden;">
+                                    <div id="diag-ram-bar" style="width: 0%; height: 100%; background: var(--accent); transition: width 0.5s;"></div>
+                                </div>
+                            </div>
+
+                            <div class="stat-card" style="display: flex; flex-direction: column; justify-content: space-between;">
+                                <h3><i class="fa-solid fa-microchip" style="color: var(--accent); margin-right: 8px;"></i> GPU Load</h3>
+                                <div style="display: flex; align-items: baseline; gap: 8px; margin: 10px 0;">
+                                    <span id="diag-gpu-val" style="font-size: 1.8rem; font-weight: 700;">0%</span>
+                                    <span id="diag-gpu-name" style="font-size: 0.72rem; color: var(--text-muted); text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 140px;" title="N/A">N/A</span>
+                                </div>
+                                <div style="background: rgba(255,255,255,0.06); height: 6px; border-radius: 3px; overflow: hidden;">
+                                    <div id="diag-gpu-bar" style="width: 0%; height: 100%; background: var(--accent); transition: width 0.5s;"></div>
+                                </div>
+                            </div>
+
+                            <div class="stat-card" style="display: flex; flex-direction: column; justify-content: space-between;">
+                                <h3><i class="fa-solid fa-database" style="color: var(--accent); margin-right: 8px;"></i> GPU VRAM</h3>
+                                <div style="display: flex; align-items: baseline; gap: 8px; margin: 10px 0;">
+                                    <span id="diag-vram-val" style="font-size: 1.5rem; font-weight: 700;">0 MB</span>
+                                    <span id="diag-vram-total" style="font-size: 0.8rem; color: var(--text-muted);">/ 0 MB</span>
+                                </div>
+                                <div style="background: rgba(255,255,255,0.06); height: 6px; border-radius: 3px; overflow: hidden;">
+                                    <div id="diag-vram-bar" style="width: 0%; height: 100%; background: var(--accent); transition: width 0.5s;"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Core Services & Subsystems -->
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 25px;">
+                            <!-- Left: Infrastructure Services -->
+                            <div style="background: rgba(22,33,54,0.3); border: 1px solid var(--border); border-radius: 12px; padding: 20px;">
+                                <h3 style="font-size: 1rem; font-weight: 600; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 15px;"><i class="fa-solid fa-server" style="margin-right: 6px;"></i> Services &amp; Connectivity</h3>
+                                <div style="display: flex; flex-direction: column; gap: 12px;" id="diag-services-list">
+                                    <!-- Populated dynamically -->
+                                </div>
+                            </div>
+                            <!-- Right: Microkernel Engine Subsystems -->
+                            <div style="background: rgba(22,33,54,0.3); border: 1px solid var(--border); border-radius: 12px; padding: 20px;">
+                                <h3 style="font-size: 1rem; font-weight: 600; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 15px;"><i class="fa-solid fa-gears" style="margin-right: 6px;"></i> Microkernel Subsystems</h3>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;" id="diag-subsystems-list">
+                                    <!-- Populated dynamically -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Version & Update Checker Card -->
+                        <div style="background: rgba(99,102,241,0.05); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; align-items: center; justify-content: space-between; gap: 20px;">
+                            <div style="display: flex; align-items: center; gap: 15px;">
+                                <i class="fa-solid fa-cloud-arrow-down" style="font-size: 2.2rem; color: var(--accent);"></i>
+                                <div>
+                                    <div style="font-weight: 700; font-size: 1.05rem;">Software Version Control</div>
+                                    <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 2px;" id="diag-update-text">Current: v1.0.0 · Checking latest releases...</div>
+                                </div>
+                            </div>
+                            <div id="diag-update-actions" style="display: flex; gap: 10px;">
+                                <button class="btn-primary" id="btn-diag-check-updates" style="font-size: 0.85rem; padding: 8px 16px;"><i class="fa-solid fa-rotate"></i> Check for Updates</button>
+                                <a href="https://github.com/dhanush708/ALOY/releases" target="_blank" class="btn-secondary" style="font-size: 0.85rem; padding: 8px 16px; text-decoration: none; display: none;" id="btn-diag-download-update"><i class="fa-solid fa-download"></i> Download Update</a>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- SETTINGS PANEL -->
+                <section class="stage-view" id="view-settings">
+
+                    <div class="settings-view-layout">
+                        <!-- Left Tab Navigation inside Settings -->
+                        <div class="settings-sidebar">
+                            <button class="settings-tab-btn active" data-tab="settings-general"><i class="fa-solid fa-sliders"></i> General & Appearance</button>
+                            <button class="settings-tab-btn" data-tab="settings-profile"><i class="fa-solid fa-user-gear"></i> User Profile</button>
+                            <button class="settings-tab-btn" data-tab="settings-backups"><i class="fa-solid fa-cloud-arrow-up"></i> GFS Database Backups</button>
+                            <button class="settings-tab-btn" data-tab="settings-rollback"><i class="fa-solid fa-file-shield"></i> Surgical File Rollbacks</button>
+                        </div>
+                        
+                        <!-- Right Tab Content -->
+                        <div class="settings-content">
+                            <!-- Tab: General & Appearance -->
+                            <div class="settings-tab-content active" id="settings-general">
+                                <h2>General & Appearance</h2>
+                                
+                                <div class="settings-section">
+                                    <h3>Theme Settings</h3>
+                                    <p class="section-desc">Select your preferred user interface accent theme style.</p>
+                                    <div class="theme-picker-container">
+                                        <button class="theme-select-btn active" data-theme="dark"><i class="fa-solid fa-moon"></i> Dark</button>
+                                        <button class="theme-select-btn" data-theme="light"><i class="fa-solid fa-sun"></i> Light</button>
+                                        <button class="theme-select-btn" data-theme="oled"><i class="fa-solid fa-circle"></i> OLED</button>
+                                    </div>
+                                </div>
+                                
+                                <div class="settings-section">
+                                    <h3>FastAPI Server Configuration</h3>
+                                    <p class="section-desc">Verify endpoint connection parameters for the microkernel server.</p>
+                                    <div class="meta-row" style="margin-top: 10px;">
+                                        <span class="meta-label">Endpoint URL</span>
+                                        <span class="meta-val"><code id="server-url">http://localhost:8000</code></span>
+                                    </div>
+                                </div>
+                                
+                                <div class="settings-section">
+                                    <h3>Model & Context System</h3>
+                                    <p class="section-desc">ALOY's current router prioritizations.</p>
+                                    <div class="meta-row" style="margin-top: 10px;">
+                                        <span class="meta-label">Primary Chat Model</span>
+                                        <span class="meta-val">phi4-mini (Local Ollama)</span>
+                                    </div>
+                                    <div class="meta-row">
+                                        <span class="meta-label">Primary Agent Model</span>
+                                        <span class="meta-val">qwen3:8b (Local Ollama)</span>
+                                    </div>
+                                </div>
+                                <div class="settings-section">
+                                    <h3>Support &amp; Feedback</h3>
+                                    <p class="section-desc">Encountered an issue or want to report a bug?</p>
+                                    <button class="btn-secondary" id="btn-report-bug-settings" style="margin-top: 5px;">
+                                        <i class="fa-solid fa-bug"></i> Report a Bug
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- Tab: User Profile -->
+                            <div class="settings-tab-content" id="settings-profile" style="display: none;">
+                                <h2>User Profile</h2>
+                                <div class="settings-section" style="max-width: 100%;">
+                                    <p class="section-desc">Manage your personal profile and custom preferences utilized by ALOY.</p>
+                                    <div style="margin-top: 15px; display: flex; flex-direction: column; gap: 12px; max-width: 500px;">
+                                        <div style="display: flex; gap: 12px;">
+                                            <div class="form-group" style="flex: 1;">
+                                                <label class="form-label" style="display: block; margin-bottom: 5px;">Your Name</label>
+                                                <input type="text" id="profile-name" class="form-input" style="width: 100%;" placeholder="e.g. Alice Smith">
+                                            </div>
+                                            <div class="form-group" style="flex: 1;">
+                                                <label class="form-label" style="display: block; margin-bottom: 5px;">Greeting Name</label>
+                                                <input type="text" id="profile-pref-name" class="form-input" style="width: 100%;" placeholder="e.g. Alice">
+                                            </div>
+                                        </div>
+                                        <div style="display: flex; gap: 12px;">
+                                            <div class="form-group" style="flex: 1;">
+                                                <label class="form-label" style="display: block; margin-bottom: 5px;">Age</label>
+                                                <input type="number" id="profile-age" class="form-input" style="width: 100%;" placeholder="e.g. 25">
+                                            </div>
+                                            <div class="form-group" style="flex: 1;">
+                                                <label class="form-label" style="display: block; margin-bottom: 5px;">Country</label>
+                                                <input type="text" id="profile-country" class="form-input" style="width: 100%;" placeholder="e.g. United States">
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label" style="display: block; margin-bottom: 5px;">Programming & General Preferences</label>
+                                            <textarea id="profile-preferences" class="form-input" style="width: 100%; height: 100px; resize: vertical;" placeholder="e.g. Primary Language: Python, OS: macOS, Editor: VS Code"></textarea>
+                                        </div>
+                                        <div style="display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap;">
+                                            <button class="btn-primary" id="btn-save-profile">Save Profile Details</button>
+                                            <button class="btn-secondary" id="btn-export-profile" style="display: flex; align-items: center; gap: 6px;"><i class="fa-solid fa-file-export"></i> Export Profile</button>
+                                            <button class="btn-secondary" id="btn-import-profile" style="display: flex; align-items: center; gap: 6px;"><i class="fa-solid fa-file-import"></i> Import Profile</button>
+                                            <input type="file" id="import-profile-file" style="display: none;" accept=".json">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="settings-section" style="border-top: 1px solid var(--border); padding-top: 20px; margin-top: 20px; max-width: 100%;">
+                                    <h3 style="color: #ff4a4a;">Danger Zone</h3>
+                                    <p class="section-desc" style="color: var(--text-muted);">Warning: These actions are destructive and cannot be undone.</p>
+                                    <div style="margin-top: 15px; display: flex; gap: 12px; flex-wrap: wrap;">
+                                        <button class="btn-ctrl btn-danger" id="btn-reset-profile" style="background-color: transparent; border: 1px solid #ff4a4a; color: #ff4a4a;">
+                                            <i class="fa-solid fa-trash-can"></i> Reset Profile &amp; Wipe Database
+                                        </button>
+                                        <button class="btn-ctrl btn-danger" id="btn-delete-profile" style="background-color: transparent; border: 1px solid #ff4a4a; color: #ff4a4a;">
+                                            <i class="fa-solid fa-user-slash"></i> Wipe Only User Profile
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Tab: GFS Backups -->
+                            <div class="settings-tab-content" id="settings-backups" style="display: none;">
+                                <h2>GFS Database Backups</h2>
+                                <div class="settings-section" style="max-width: 100%;">
+                                    <p class="section-desc">Manage SQLite database checkpoints using Grandfather-Father-Son (GFS) rotation.</p>
+                                    <button id="btn-trigger-backup" class="btn-primary" style="margin: 14px 0;">
+                                        <i class="fa-solid fa-cloud-arrow-up"></i> Trigger Immediate Backup
+                                    </button>
+                                    <h4>Available System Backups</h4>
+                                    <div id="backups-list-container" class="checkpoints-list-container" style="min-height: 200px; max-height: 400px; overflow-y: auto;">
+                                        <div class="empty-list">No backups recorded yet.</div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Tab: Surgical Rollbacks -->
+                            <div class="settings-tab-content" id="settings-rollback" style="display: none;">
+                                <h2>Surgical File Rollback</h2>
+                                <div class="settings-section" style="max-width: 100%;">
+                                    <p class="section-desc">Restore individual files or directories back to a specific checkpoint state of an active session.</p>
+                                    <div class="form-group" style="margin-bottom: 12px;">
+                                        <label for="rollback-session-select">Select Agent Session</label>
+                                        <select id="rollback-session-select" class="form-select">
+                                            <option value="">-- Choose Session --</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group" style="margin-bottom: 12px;">
+                                        <label for="rollback-checkpoint-select">Select Checkpoint</label>
+                                        <select id="rollback-checkpoint-select" class="form-select">
+                                            <option value="">-- Choose Checkpoint --</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group" style="margin-bottom: 16px;">
+                                        <label for="rollback-file-path">File Path to Revert</label>
+                                        <input type="text" id="rollback-file-path" class="form-input" placeholder="e.g. src/main.py">
+                                    </div>
+                                    <button id="btn-revert-file" class="btn-ctrl btn-danger">
+                                        <i class="fa-solid fa-file-shield"></i> Run Surgical Rollback
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ABOUT ALOY VIEW -->
+                <section class="stage-view" id="view-about">
+                    <div class="about-view-layout" style="max-width: 800px; margin: 0 auto; padding: 35px 20px;">
+                        <div style="text-align: center; margin-bottom: 35px;">
+                            <div class="onboarding-logo" style="margin-bottom: 15px; display: flex; justify-content: center;">
+                                <i class="fa-solid fa-rocket" style="font-size: 3rem; color: var(--accent);"></i>
+                            </div>
+                            <h2 style="font-family: var(--font-heading); font-size: 2.2rem; font-weight: 700; color: var(--text); margin-bottom: 8px;">ALOY V2</h2>
+                            <p style="font-size: 0.95rem; color: var(--text-muted); max-width: 600px; margin: 0 auto;" id="about-description">
+                                Advanced Local-First Agentic Operating System
+                            </p>
+                        </div>
+
+                        <div style="background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 25px; margin-bottom: 25px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);">
+                            <h3 style="font-family: var(--font-heading); font-size: 1.25rem; font-weight: 600; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 15px;">Created by</h3>
+                            <p style="font-size: 0.95rem; color: var(--text); line-height: 1.6; margin-bottom: 5px;">
+                                <strong>Dhanush A.</strong>
+                            </p>
+                            <p style="font-size: 0.9rem; color: var(--text-muted); line-height: 1.6; margin: 0;">
+                                Designed, architected, engineered, implemented, tested, and documented end-to-end by Dhanush A.
+                            </p>
+                        </div>
+
+                        <div style="background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 25px; margin-bottom: 25px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);">
+                            <h3 style="font-family: var(--font-heading); font-size: 1.25rem; font-weight: 600; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 15px;">Project Details</h3>
+                            <div style="display: grid; grid-template-columns: 150px 1fr; gap: 10px 20px; font-size: 0.9rem; color: var(--text);">
+                                <div style="color: var(--text-muted); font-weight: 600;">Current Version:</div>
+                                <div id="about-version">1.0</div>
+
+
+                                <div style="color: var(--text-muted); font-weight: 600;">GitHub Repository:</div>
+                                <div><a id="about-github" href="https://github.com/dhanush708" target="_blank" style="color: var(--accent); text-decoration: none;">https://github.com/dhanush708</a></div>
+
+                                <div style="color: var(--text-muted); font-weight: 600;">Contact Email:</div>
+                                <div><a id="about-email" href="mailto:anbudhanush31@gmail.com" style="color: var(--accent); text-decoration: none;">anbudhanush31@gmail.com</a></div>
+
+                                <div style="color: var(--text-muted); font-weight: 600;">License:</div>
+                                <div id="about-license">Proprietary EULA &mdash; All Rights Reserved</div>
+                            </div>
+                        </div>
+
+                        <div style="display: flex; gap: 15px; justify-content: center; margin-top: 30px;">
+                            <button class="btn-primary" id="btn-report-bug-about" style="display: flex; align-items: center; gap: 8px;">
+                                <i class="fa-solid fa-bug"></i> Report a Bug
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+        </main>
+
+        <!-- ========================================== -->
+        <!-- RIGHT SIDEBAR: SESSION DETAILS             -->
+        <!-- ========================================== -->
+        <aside class="sidebar-right collapsed" id="sidebar-right">
+            <div class="sidebar-right-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+                <h2>Subsystem Live Stats</h2>
+                <button class="sidebar-toggle" id="sidebar-close-right" aria-label="Close Details Panel" style="background: none; border: none; color: var(--text-muted); font-size: 1.1rem; cursor: pointer;">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            
+            <!-- Real-time Resource Gauges -->
+            <div class="details-section">
+                <h3>Hardware & Resources</h3>
+                
+                <div class="gauge-container" style="margin-bottom: 12px;">
+                    <div class="gauge-label" style="display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 4px;">
+                        <span><i class="fa-solid fa-cpu" style="margin-right: 4px; color: var(--accent);"></i> CPU</span>
+                        <span id="val-cpu">0%</span>
+                    </div>
+                    <div class="gauge-bar-bg" style="height: 6px; background: var(--border); border-radius: 3px; overflow: hidden;">
+                        <div class="gauge-bar-fill" id="bar-cpu" style="width: 0%; height: 100%; background: var(--accent-gradient); transition: width 0.5s ease;"></div>
+                    </div>
+                </div>
+                
+                <div class="gauge-container" style="margin-bottom: 12px;">
+                    <div class="gauge-label" style="display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 4px;">
+                        <span><i class="fa-solid fa-microchip" style="margin-right: 4px; color: var(--accent);"></i> GPU</span>
+                        <span id="val-gpu">0%</span>
+                    </div>
+                    <div class="gauge-bar-bg" style="height: 6px; background: var(--border); border-radius: 3px; overflow: hidden;">
+                        <div class="gauge-bar-fill" id="bar-gpu" style="width: 0%; height: 100%; background: var(--accent-gradient); transition: width 0.5s ease;"></div>
+                    </div>
+                </div>
+
+                <div class="gauge-container" style="margin-bottom: 12px;">
+                    <div class="gauge-label" style="display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 4px;">
+                        <span><i class="fa-solid fa-memory" style="margin-right: 4px; color: var(--accent);"></i> RAM (System Memory)</span>
+                        <span id="val-ram">0%</span>
+                    </div>
+                    <div class="gauge-bar-bg" style="height: 6px; background: var(--border); border-radius: 3px; overflow: hidden;">
+                        <div class="gauge-bar-fill" id="bar-ram" style="width: 0%; height: 100%; background: var(--accent-gradient); transition: width 0.5s ease;"></div>
+                    </div>
+                </div>
+
+                <div class="gauge-container" style="margin-bottom: 12px;">
+                    <div class="gauge-label" style="display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 4px;">
+                        <span><i class="fa-solid fa-database" style="margin-right: 4px; color: var(--accent);"></i> VRAM (GPU Memory)</span>
+                        <span id="val-vram">0 MB / 8192 MB</span>
+                    </div>
+                    <div class="gauge-bar-bg" style="height: 6px; background: var(--border); border-radius: 3px; overflow: hidden;">
+                        <div class="gauge-bar-fill" id="bar-vram" style="width: 0%; height: 100%; background: var(--accent-gradient); transition: width 0.5s ease;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="details-section">
+                <h3>Model & Performance</h3>
+                <div class="meta-row">
+                    <span class="meta-label"><i class="fa-solid fa-network-wired"></i> Model</span>
+                    <span class="meta-val highlight" id="active-model">phi4-mini</span>
+                </div>
+                <div class="meta-row">
+                    <span class="meta-label"><i class="fa-solid fa-gauge-high"></i> Latency</span>
+                    <span class="meta-val" id="stat-latency">0 ms</span>
+                </div>
+                <div class="meta-row">
+                    <span class="meta-label"><i class="fa-solid fa-envelope-open-text"></i> Intent</span>
+                    <span class="meta-val" id="active-intent">simple_chat</span>
+                </div>
+            </div>
+
+            <div class="details-section">
+                <h3>Context & Memory</h3>
+                <div class="gauge-container" style="margin-bottom: 12px;">
+                    <div class="gauge-label" style="display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 4px;">
+                        <span><i class="fa-solid fa-coins" style="margin-right: 4px; color: var(--accent);"></i> Token Budget</span>
+                        <span id="token-budget">0 / 8192</span>
+                    </div>
+                    <div class="gauge-bar-bg" style="height: 6px; background: var(--border); border-radius: 3px; overflow: hidden;">
+                        <div class="gauge-bar-fill" id="bar-tokens" style="width: 0%; height: 100%; background: var(--accent-gradient); transition: width 0.5s ease;"></div>
+                    </div>
+                </div>
+                <div class="meta-row">
+                    <span class="meta-label"><i class="fa-solid fa-brain"></i> Memory Hits</span>
+                    <span class="meta-val" id="memory-hits-count">0</span>
+                </div>
+            </div>
+            
+            <div class="details-section">
+                <h3>Reasoning Engine</h3>
+                <div class="meta-row">
+                    <span class="meta-label">Status</span>
+                    <span class="meta-val" id="reasoning-status">Idle</span>
+                </div>
+                <div class="reasoning-thoughts-box" id="reasoning-thoughts">
+                    <span class="placeholder-text">Thoughts empty...</span>
+                </div>
+            </div>
+
+            <div class="details-section">
+                <h3>Knowledge & Tools</h3>
+                <div class="meta-row">
+                    <span class="meta-label">Tool Usage</span>
+                    <span class="meta-val" id="tool-use-count">0</span>
+                </div>
+                <div class="tools-list-box" id="tools-list">
+                    <span class="placeholder-text">No tools used in this session.</span>
+                </div>
+            </div>
+        </aside>
+
+    </div>
+
+    <!-- ========================================== -->
+    <!-- FOOTER: LIVE SYSTEM STATUS BAR             -->
+    <!-- ========================================== -->
+    <footer class="system-status-bar">
+        <div class="status-indicators">
+            <span class="status-indicator" id="status-kernel"><span class="status-dot green"></span> Kernel: Ready</span>
+            <span class="status-indicator" id="status-memory"><span class="status-dot green"></span> Memory: Ready</span>
+            <span class="status-indicator" id="status-learning"><span class="status-dot yellow"></span> Learning: Waiting</span>
+            <span class="status-indicator" id="status-reasoning"><span class="status-dot green"></span> Reasoning: Ready</span>
+            <span class="status-indicator" id="status-knowledge"><span class="status-dot gray"></span> Knowledge: Offline</span>
+            <span class="status-indicator" id="status-agent"><span class="status-dot gray"></span> Agent: Offline</span>
+            <span class="status-indicator" id="status-tools"><span class="status-dot green"></span> Tools: Ready</span>
+            <span class="status-indicator" id="status-router"><span class="status-dot green"></span> Model Router: Ready</span>
+        </div>
+        <div class="status-logs" id="status-logs">System online and listening for events...</div>
+    </footer>
+
+    <!-- Dependency Health Check Overlay -->
+    <div id="dependency-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10, 17, 30, 0.9); backdrop-filter: blur(16px); z-index: 10000; align-items: center; justify-content: center; overflow-y: auto; padding: 20px;">
+
+        <div class="onboarding-card" style="width: 100%; max-width: 650px; background: rgba(22, 33, 54, 0.75); border: 1px solid var(--border); border-radius: 16px; padding: 30px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5); display: flex; flex-direction: column; gap: 20px;">
+            <div class="onboarding-header" style="text-align: center;">
+                <div class="onboarding-logo" style="margin-bottom: 12px; display: flex; justify-content: center;">
+                    <i class="fa-solid fa-square-check" style="font-size: 2.8rem; color: var(--accent);"></i>
+                </div>
+                <h2 style="font-family: var(--font-heading); font-size: 1.7rem; font-weight: 700; color: var(--text); margin-bottom: 6px;">System Health &amp; Dependency Check</h2>
+                <p style="font-size: 0.9rem; color: var(--text-muted);">Verifying hardware compatibility and model libraries before launching ALOY</p>
+            </div>
+            
+            <!-- Hardware Report -->
+            <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); border-radius: 10px; padding: 15px;">
+                <h3 style="font-size: 0.95rem; font-weight: 600; color: var(--text); margin-bottom: 10px; display: flex; align-items: center; gap: 8px;"><i class="fa-solid fa-microchip" style="color: var(--accent);"></i> Hardware Validation Report</h3>
+                <div id="hardware-report-list" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px 15px; font-size: 0.82rem;">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+
+            <!-- Models Library -->
+            <div style="display: flex; flex-direction: column; gap: 15px;">
+                <div>
+                    <h3 style="font-size: 0.95rem; font-weight: 600; color: var(--text); margin-bottom: 8px; display: flex; align-items: center; gap: 8px;"><i class="fa-solid fa-circle-exclamation" style="color: #ef4444;"></i> Required Models (Blocks Startup)</h3>
+                    <div id="required-models-list" style="display: flex; flex-direction: column; gap: 8px;">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+
+                <div>
+                    <h3 style="font-size: 0.95rem; font-weight: 600; color: var(--text); margin-bottom: 8px; display: flex; align-items: center; gap: 8px;"><i class="fa-solid fa-circle-question" style="color: var(--accent);"></i> Optional Models (Enhances Features)</h3>
+                    <div id="optional-models-list" style="display: flex; flex-direction: column; gap: 8px;">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Storage Estimation Banner -->
+            <div id="storage-estimate-banner" style="background: rgba(74, 222, 128, 0.08); border: 1px solid rgba(74, 222, 128, 0.15); border-radius: 8px; padding: 12px; font-size: 0.85rem; display: none; align-items: center; justify-content: space-between;">
+                <span style="color: var(--text-muted);"><i class="fa-solid fa-hard-drive" style="color: #4ade80; margin-right: 6px;"></i> Est. Download Storage Needed:</span>
+                <strong id="storage-needed-val" style="color: #4ade80;">0.0 GB</strong>
+            </div>
+            
+            <div id="dependency-guidance" style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.15); border-radius: 8px; padding: 15px; display: none;">
+                <h4 style="color: #ef4444; font-weight: 600; font-size: 0.9rem; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                    <i class="fa-solid fa-circle-exclamation"></i> Action Required
+                </h4>
+                <p id="dependency-guidance-text" style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.5; margin: 0;"></p>
+            </div>
+
+            <button class="btn-primary" id="btn-recheck-dependencies" style="width: 100%; justify-content: center; font-size: 1rem; padding: 12px 18px; display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-rotate"></i> Re-check Dependencies
+            </button>
+        </div>
+    </div>
+
+    <!-- Unexpected Shutdown Recovery Overlay -->
+    <div id="crash-recovery-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10, 17, 30, 0.95); backdrop-filter: blur(20px); z-index: 10006; align-items: center; justify-content: center; font-family: var(--font-body); color: var(--text); padding: 20px;">
+
+        <div class="onboarding-card" style="width: 100%; max-width: 550px; background: rgba(22, 33, 54, 0.8); border: 1px solid rgba(251, 191, 36, 0.35); border-radius: 16px; padding: 35px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6); text-align: center;">
+            <div style="margin-bottom: 20px; display: flex; justify-content: center;">
+                <i class="fa-solid fa-triangle-exclamation" style="font-size: 3.5rem; color: #fbbf24;"></i>
+            </div>
+            <h2 style="font-family: var(--font-heading); font-size: 1.8rem; font-weight: 700; color: var(--text); margin-bottom: 10px;">Unexpected Exit Detected</h2>
+            <p style="font-size: 0.95rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 25px;">
+                It looks like ALOY did not shut down cleanly during the last session. To prevent data corruption, you can restore your session or clear all memories to start fresh.
+            </p>
+            
+            <div style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
+                <button class="btn-primary" id="btn-crash-restore" style="display: flex; align-items: center; gap: 6px; padding: 12px 24px; font-size: 0.95rem;">
+                    <i class="fa-solid fa-window-restore"></i> Restore Session
+                </button>
+                <button class="btn-ctrl btn-danger" id="btn-crash-reset" style="display: flex; align-items: center; gap: 6px; padding: 12px 24px; font-size: 0.95rem; background-color: transparent; border: 1px solid #ff4a4a; color: #ff4a4a;">
+                    <i class="fa-solid fa-trash-can"></i> Start Fresh
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Global Recovery / Crash Screen Overlay -->
+
+    <div id="recovery-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10, 17, 30, 0.95); backdrop-filter: blur(20px); z-index: 10005; align-items: center; justify-content: center; font-family: var(--font-body); color: var(--text); padding: 20px;">
+
+        <div class="onboarding-card" style="width: 100%; max-width: 550px; background: rgba(22, 33, 54, 0.8); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 16px; padding: 35px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6); text-align: center;">
+            <div style="margin-bottom: 20px; display: flex; justify-content: center;">
+                <i class="fa-solid fa-triangle-exclamation" style="font-size: 3.5rem; color: #ef4444;"></i>
+            </div>
+            <h2 style="font-family: var(--font-heading); font-size: 1.8rem; font-weight: 700; color: var(--text); margin-bottom: 10px;">ALOY Encountered an Unexpected Error</h2>
+            <p style="font-size: 0.95rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 25px;">
+                The connection to the local backend server was lost or an internal exception occurred. Your profile data remains secure.
+            </p>
+            
+            <div style="background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 30px; text-align: left; max-height: 120px; overflow-y: auto; font-family: monospace; font-size: 0.8rem; color: #ef4444;" id="recovery-error-detail">
+                Connection refused or internal server exception.
+            </div>
+
+            <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+                <button class="btn-primary" id="btn-recovery-restart" style="display: flex; align-items: center; gap: 6px;">
+                    <i class="fa-solid fa-arrow-rotate-right"></i> Restart ALOY
+                </button>
+                <button class="btn-secondary" id="btn-recovery-logs" style="display: flex; align-items: center; gap: 6px;">
+                    <i class="fa-solid fa-download"></i> Save Diagnostic Logs
+                </button>
+                <button class="btn-secondary" id="btn-recovery-bug" style="display: flex; align-items: center; gap: 6px;">
+                    <i class="fa-solid fa-bug"></i> Report Bug
+                </button>
+            </div>
+        </div>
+        <!-- First-Run Wizard (6-Step Onboarding) -->
+    <div id="onboarding-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(8, 12, 24, 0.97); backdrop-filter: blur(20px); z-index: 9999; overflow-y: auto; padding: 30px 20px;">
+        <div style="max-width: 680px; margin: 0 auto;">
+
+            <!-- Progress Bar -->
+            <div style="margin-bottom: 32px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <span style="font-family: var(--font-heading); font-size: 0.9rem; color: var(--text-muted);">First-Time Setup</span>
+                    <span id="wizard-step-label" style="font-size: 0.85rem; color: var(--accent); font-weight: 600;">Step 1 of 8</span>
+                </div>
+                <div style="background: rgba(255,255,255,0.06); border-radius: 999px; height: 4px; overflow: hidden;">
+                    <div id="wizard-progress-bar" style="height: 100%; background: linear-gradient(90deg, var(--accent), #22d3ee); border-radius: 999px; transition: width 0.5s cubic-bezier(0.4,0,0.2,1); width: 12.5%;"></div>
+                </div>
+                <!-- Step dots -->
+                <div style="display: flex; justify-content: space-between; margin-top: 10px; flex-wrap: wrap; gap: 4px;">
+                    <div class="wizard-dot active" data-step="1" title="Welcome">
+                        <i class="fa-solid fa-hand-wave"></i>
+                    </div>
+                    <div class="wizard-dot" data-step="2" title="System">
+                        <i class="fa-solid fa-microchip"></i>
+                    </div>
+                    <div class="wizard-dot" data-step="3" title="Dependencies">
+                        <i class="fa-solid fa-cubes"></i>
+                    </div>
+                    <div class="wizard-dot" data-step="4" title="Ollama">
+                        <i class="fa-solid fa-network-wired"></i>
+                    </div>
+                    <div class="wizard-dot" data-step="5" title="Models">
+                        <i class="fa-solid fa-brain"></i>
+                    </div>
+                    <div class="wizard-dot" data-step="6" title="Profile">
+                        <i class="fa-solid fa-user"></i>
+                    </div>
+                    <div class="wizard-dot" data-step="7" title="Appearance">
+                        <i class="fa-solid fa-palette"></i>
+                    </div>
+                    <div class="wizard-dot" data-step="8" title="Launch">
+                        <i class="fa-solid fa-rocket"></i>
+                    </div>
+                </div>
+            </div>
+
+
+            <!-- Step panels -->
+            <div style="background: rgba(22,33,54,0.7); border: 1px solid var(--border); border-radius: 20px; padding: 40px; box-shadow: 0 20px 60px rgba(0,0,0,0.5);">
+
+                <!-- ── STEP 1: WELCOME ── -->
+                <div id="wizard-step-1" class="wizard-step">
+                    <div style="text-align: center; padding: 20px 0;">
+                        <div style="width: 90px; height: 90px; margin: 0 auto 24px; border-radius: 50%; background: linear-gradient(135deg, rgba(99,102,241,0.2), rgba(34,211,238,0.15)); border: 1px solid rgba(99,102,241,0.3); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 40px rgba(99,102,241,0.2);">
+                            <img src="/static/assets/icons/aloy.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block'" style="width: 55px; height: 55px; object-fit: contain; border-radius: 10px;">
+                            <i class="fa-solid fa-brain" style="display: none; font-size: 2.5rem; color: var(--accent);"></i>
+                        </div>
+                        <h1 style="font-family: var(--font-heading); font-size: 2.4rem; font-weight: 800; background: linear-gradient(135deg, #fff 0%, var(--accent) 50%, #22d3ee 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 14px; line-height: 1.2;">Welcome to ALOY</h1>
+                        <p style="font-size: 1.05rem; color: var(--text-muted); max-width: 480px; margin: 0 auto 28px; line-height: 1.7;">Your local-first personal AI companion. Everything runs on your machine — no cloud, no subscriptions, no data sharing.</p>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 36px; text-align: left;">
+                            <div style="background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.15); border-radius: 12px; padding: 16px;">
+                                <i class="fa-solid fa-lock" style="color: var(--accent); margin-bottom: 8px; font-size: 1.3rem;"></i>
+                                <div style="font-weight: 600; font-size: 0.9rem; margin-bottom: 4px;">100% Private</div>
+                                <div style="font-size: 0.8rem; color: var(--text-muted);">Your data never leaves your machine</div>
+                            </div>
+                            <div style="background: rgba(34,211,238,0.06); border: 1px solid rgba(34,211,238,0.12); border-radius: 12px; padding: 16px;">
+                                <i class="fa-solid fa-bolt" style="color: #22d3ee; margin-bottom: 8px; font-size: 1.3rem;"></i>
+                                <div style="font-weight: 600; font-size: 0.9rem; margin-bottom: 4px;">AI-Powered</div>
+                                <div style="font-size: 0.8rem; color: var(--text-muted);">Local LLMs via Ollama runtime</div>
+                            </div>
+                            <div style="background: rgba(74,222,128,0.06); border: 1px solid rgba(74,222,128,0.12); border-radius: 12px; padding: 16px;">
+                                <i class="fa-solid fa-memory" style="color: #4ade80; margin-bottom: 8px; font-size: 1.3rem;"></i>
+                                <div style="font-weight: 600; font-size: 0.9rem; margin-bottom: 4px;">Persistent Memory</div>
+                                <div style="font-size: 0.8rem; color: var(--text-muted);">Remembers you across sessions</div>
+                            </div>
+                        </div>
+                        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0;">This setup takes about <strong style="color: var(--text);">2 minutes</strong>. Let's get started.</p>
+                    </div>
+                </div>
+
+                <!-- ── STEP 2: SYSTEM REQUIREMENTS ── -->
+                <div id="wizard-step-2" class="wizard-step" style="display: none;">
+                    <div style="text-align: center; margin-bottom: 28px;">
+                        <i class="fa-solid fa-microchip" style="font-size: 2.5rem; color: var(--accent); margin-bottom: 14px; display: block;"></i>
+                        <h2 style="font-family: var(--font-heading); font-size: 1.8rem; font-weight: 700; margin-bottom: 8px;">System Requirements</h2>
+                        <p style="color: var(--text-muted); font-size: 0.95rem;">Checking your hardware compatibility with ALOY</p>
+                    </div>
+                    <div id="wizard-hw-list" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
+                        <div style="text-align: center; padding: 30px; color: var(--text-muted);">
+                            <i class="fa-solid fa-spinner fa-spin" style="font-size: 1.8rem; margin-bottom: 10px; display: block;"></i>
+                            Checking hardware...
+                        </div>
+                    </div>
+                    <div id="wizard-hw-note" style="display: none; background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.2); border-radius: 10px; padding: 12px 16px; font-size: 0.85rem; color: #fbbf24;">
+                        <i class="fa-solid fa-triangle-exclamation" style="margin-right: 6px;"></i>
+                        <span id="wizard-hw-note-text">Some hardware specs are below the recommended threshold, but ALOY can still run with reduced performance.</span>
+                    </div>
+                </div>
+
+                <!-- ── STEP 3: DEPENDENCY CHECK ── -->
+                <div id="wizard-step-3" class="wizard-step" style="display: none;">
+                    <div style="text-align: center; margin-bottom: 28px;">
+                        <i class="fa-solid fa-cubes" style="font-size: 2.5rem; color: var(--accent); margin-bottom: 14px; display: block;"></i>
+                        <h2 style="font-family: var(--font-heading); font-size: 1.8rem; font-weight: 700; margin-bottom: 8px;">System Dependencies</h2>
+                        <p style="color: var(--text-muted); font-size: 0.95rem;">Checking python runtime, git, database, database extensions, and internet connection</p>
+                    </div>
+                    <div id="wizard-dep-list" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
+                        <!-- Filled dynamically with green/yellow/red cards -->
+                    </div>
+                    <button id="btn-wizard-recheck-deps" style="background: rgba(99,102,241,0.12); border: 1px solid rgba(99,102,241,0.25); border-radius: 8px; color: var(--accent); padding: 10px 18px; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; gap: 7px; transition: all 0.2s; width: 100%; justify-content: center;">
+                        <i class="fa-solid fa-rotate"></i> Re-check Core Dependencies
+                    </button>
+                </div>
+
+                <!-- ── STEP 4: OLLAMA CHECK ── -->
+                <div id="wizard-step-4" class="wizard-step" style="display: none;">
+                    <div style="text-align: center; margin-bottom: 28px;">
+                        <i class="fa-solid fa-network-wired" style="font-size: 2.5rem; color: var(--accent); margin-bottom: 14px; display: block;"></i>
+                        <h2 style="font-family: var(--font-heading); font-size: 1.8rem; font-weight: 700; margin-bottom: 8px;">Ollama Local Core</h2>
+                        <p style="color: var(--text-muted); font-size: 0.95rem;">Verifying local Ollama model runtime server connection</p>
+                    </div>
+                    <div id="wizard-ollama-status-card" style="margin-bottom: 20px;">
+                        <!-- Populate dynamically -->
+                    </div>
+                    <div id="wizard-ollama-guide" style="display: none; background: rgba(99,102,241,0.04); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin-bottom: 20px;">
+                        <h4 style="font-weight: 600; font-size: 0.95rem; margin-bottom: 8px;"><i class="fa-solid fa-download" style="color: var(--accent); margin-right: 6px;"></i> Install Ollama Core</h4>
+                        <p style="font-size: 0.83rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 18px;">
+                            Ollama is a lightweight local model runner. It is required for ALOY to run models entirely private and offline.
+                            <br><span style="color: var(--text);">Approximate Download Size:</span> ~350 MB (Windows Installer)
+                        </p>
+                        <a href="https://ollama.com/download" target="_blank" class="btn-primary" style="display: inline-flex; text-decoration: none; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-up-right-from-square"></i> Download Ollama Installer
+                        </a>
+                    </div>
+                    <button id="btn-wizard-recheck-ollama" style="background: rgba(99,102,241,0.12); border: 1px solid rgba(99,102,241,0.25); border-radius: 8px; color: var(--accent); padding: 10px 18px; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; gap: 7px; transition: all 0.2s; width: 100%; justify-content: center;">
+                        <i class="fa-solid fa-rotate"></i> Re-check Ollama Connection
+                    </button>
+                </div>
+
+                <!-- ── STEP 5: MODEL CHECK ── -->
+                <div id="wizard-step-5" class="wizard-step" style="display: none;">
+                    <div style="text-align: center; margin-bottom: 28px;">
+                        <i class="fa-solid fa-brain" style="font-size: 2.5rem; color: var(--accent); margin-bottom: 14px; display: block;"></i>
+                        <h2 style="font-family: var(--font-heading); font-size: 1.8rem; font-weight: 700; margin-bottom: 8px;">Required Models</h2>
+                        <p style="color: var(--text-muted); font-size: 0.95rem;">Checking for Qwen3 and Qwen2.5-Coder model installations</p>
+                    </div>
+
+                    <div style="margin-bottom: 18px;">
+                        <h4 style="font-size: 0.85rem; font-weight: 600; color: #ef4444; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px;">Required Models <span style="font-size: 0.75rem; font-weight: 400; color: var(--text-muted);">(must be installed)</span></h4>
+                        <div id="wizard-models-required-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
+                    </div>
+
+                    <div id="wizard-models-pull-guidance" style="display: none; background: rgba(239,68,68,0.06); border: 1px solid rgba(239,68,68,0.15); border-radius: 10px; padding: 14px 16px; margin-bottom: 18px;">
+                        <div style="font-weight: 600; color: #ef4444; font-size: 0.88rem; margin-bottom: 6px;"><i class="fa-solid fa-circle-exclamation" style="margin-right: 6px;"></i>Required Models Missing</div>
+                        <div id="wizard-models-pull-cmds" style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.6;"></div>
+                    </div>
+
+                    <div style="display: flex; gap: 10px; width: 100%;">
+                        <button id="btn-wizard-recheck-models" style="flex: 1; background: rgba(99,102,241,0.12); border: 1px solid rgba(99,102,241,0.25); border-radius: 8px; color: var(--accent); padding: 10px; font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                            <i class="fa-solid fa-rotate"></i> Re-check Models
+                        </button>
+                        <button id="btn-wizard-skip-models" style="flex: 1; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 8px; color: var(--text-muted); padding: 10px; font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                            <i class="fa-solid fa-chevron-right"></i> Skip pulls for now
+                        </button>
+                    </div>
+                </div>
+
+                <!-- ── STEP 6: PROFILE ── -->
+                <div id="wizard-step-6" class="wizard-step" style="display: none;">
+                    <div style="text-align: center; margin-bottom: 28px;">
+                        <i class="fa-solid fa-user-circle" style="font-size: 2.5rem; color: var(--accent); margin-bottom: 14px; display: block;"></i>
+                        <h2 style="font-family: var(--font-heading); font-size: 1.8rem; font-weight: 700; margin-bottom: 8px;">Your Profile</h2>
+                        <p style="color: var(--text-muted); font-size: 0.95rem;">Tell ALOY a little about yourself so it can personalise your experience</p>
+                    </div>
+
+                    <div style="display: flex; flex-direction: column; gap: 16px;">
+                        <div style="display: flex; gap: 14px;">
+                            <div style="flex: 1;">
+                                <label class="form-label" style="display: block; margin-bottom: 6px;">Full Name</label>
+                                <input type="text" id="onboard-name" class="form-input" placeholder="e.g. Alex Johnson" style="width: 100%;">
+                            </div>
+                            <div style="flex: 1;">
+                                <label class="form-label" style="display: block; margin-bottom: 6px;">Preferred Name</label>
+                                <input type="text" id="onboard-pref-name" class="form-input" placeholder="e.g. Alex" style="width: 100%;">
+                            </div>
+                        </div>
+
+                        <div style="display: flex; gap: 14px;">
+                            <div style="flex: 1;">
+                                <label class="form-label" style="display: block; margin-bottom: 6px;">Country</label>
+                                <input type="text" id="onboard-country" class="form-input" placeholder="e.g. United Kingdom" style="width: 100%;">
+                            </div>
+                            <div style="flex: 1;">
+                                <label class="form-label" style="display: block; margin-bottom: 6px;">Age</label>
+                                <input type="number" id="onboard-age" class="form-input" placeholder="e.g. 28" style="width: 100%;" min="10" max="99">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="form-label" style="display: block; margin-bottom: 8px;">Primary Use</label>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                                <label id="use-dev" class="wizard-use-card selected" data-value="Developer">
+                                    <i class="fa-solid fa-code"></i>
+                                    <span>Developer</span>
+                                </label>
+                                <label id="use-student" class="wizard-use-card" data-value="Student">
+                                    <i class="fa-solid fa-graduation-cap"></i>
+                                    <span>Student</span>
+                                </label>
+                                <label id="use-research" class="wizard-use-card" data-value="Research">
+                                    <i class="fa-solid fa-flask"></i>
+                                    <span>Research</span>
+                                </label>
+                                <label id="use-general" class="wizard-use-card" data-value="General AI">
+                                    <i class="fa-solid fa-sparkles"></i>
+                                    <span>General AI</span>
+                                </label>
+                            </div>
+                            <input type="hidden" id="onboard-primary-use" value="Developer">
+                        </div>
+
+                        <div>
+                            <label class="form-label" style="display: block; margin-bottom: 8px;">Coding Experience</label>
+                            <div style="display: flex; gap: 10px;">
+                                <label class="wizard-exp-pill selected" data-value="Beginner"><span>Beginner</span></label>
+                                <label class="wizard-exp-pill" data-value="Intermediate"><span>Intermediate</span></label>
+                                <label class="wizard-exp-pill" data-value="Advanced"><span>Advanced</span></label>
+                                <label class="wizard-exp-pill" data-value="Expert"><span>Expert</span></label>
+                            </div>
+                            <input type="hidden" id="onboard-experience" value="Beginner">
+                        </div>
+
+                        <div>
+                            <label class="form-label" style="display: block; margin-bottom: 6px;">Preferences &amp; Instructions <span style="color: var(--text-muted); font-weight: 400;">(optional)</span></label>
+                            <textarea id="onboard-preferences" class="form-input" style="width: 100%; height: 80px; resize: vertical;" placeholder="e.g. Primary language: Python, Editor: VS Code. Prefer concise explanations..."></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── STEP 7: APPEARANCE ── -->
+                <div id="wizard-step-7" class="wizard-step" style="display: none;">
+                    <div style="text-align: center; margin-bottom: 32px;">
+                        <i class="fa-solid fa-palette" style="font-size: 2.5rem; color: var(--accent); margin-bottom: 14px; display: block;"></i>
+                        <h2 style="font-family: var(--font-heading); font-size: 1.8rem; font-weight: 700; margin-bottom: 8px;">Appearance</h2>
+                        <p style="color: var(--text-muted); font-size: 0.95rem;">Choose how ALOY looks. You can change this anytime in Settings.</p>
+                    </div>
+
+                    <div style="margin-bottom: 28px;">
+                        <label style="display: block; font-weight: 600; margin-bottom: 14px; font-size: 0.95rem;">Theme</label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px;">
+                            <div class="wizard-theme-card selected" id="wtheme-dark" data-theme="dark" onclick="wizardSelectTheme('dark')">
+                                <div style="width: 100%; height: 70px; border-radius: 8px; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.06); display: flex; align-items: center; justify-content: center; gap: 4px;">
+                                    <div style="width: 8px; height: 28px; background: #6366f1; border-radius: 3px;"></div>
+                                    <div style="width: 18px; height: 8px; background: rgba(255,255,255,0.15); border-radius: 3px;"></div>
+                                    <div style="width: 12px; height: 8px; background: rgba(255,255,255,0.08); border-radius: 3px;"></div>
+                                </div>
+                                <i class="fa-solid fa-moon" style="color: #6366f1; margin-right: 6px;"></i>
+                                <span style="font-weight: 600;">Dark</span>
+                            </div>
+                            <div class="wizard-theme-card" id="wtheme-oled" data-theme="oled" onclick="wizardSelectTheme('oled')">
+                                <div style="width: 100%; height: 70px; border-radius: 8px; background: #000; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.04); display: flex; align-items: center; justify-content: center; gap: 4px;">
+                                    <div style="width: 8px; height: 28px; background: #10b981; border-radius: 3px;"></div>
+                                    <div style="width: 18px; height: 8px; background: rgba(255,255,255,0.1); border-radius: 3px;"></div>
+                                    <div style="width: 12px; height: 8px; background: rgba(255,255,255,0.05); border-radius: 3px;"></div>
+                                </div>
+                                <i class="fa-solid fa-circle" style="color: #10b981; margin-right: 6px;"></i>
+                                <span style="font-weight: 600;">OLED</span>
+                            </div>
+                            <div class="wizard-theme-card" id="wtheme-light" data-theme="light" onclick="wizardSelectTheme('light')">
+                                <div style="width: 100%; height: 70px; border-radius: 8px; background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); margin-bottom: 10px; border: 1px solid rgba(0,0,0,0.08); display: flex; align-items: center; justify-content: center; gap: 4px;">
+                                    <div style="width: 8px; height: 28px; background: #3b82f6; border-radius: 3px;"></div>
+                                    <div style="width: 18px; height: 8px; background: rgba(0,0,0,0.12); border-radius: 3px;"></div>
+                                    <div style="width: 12px; height: 8px; background: rgba(0,0,0,0.07); border-radius: 3px;"></div>
+                                </div>
+                                <i class="fa-solid fa-sun" style="color: #3b82f6; margin-right: 6px;"></i>
+                                <span style="font-weight: 600;">Light</span>
+                            </div>
+                        </div>
+                        <input type="hidden" id="wizard-selected-theme" value="dark">
+                    </div>
+                </div>
+
+                <!-- ── STEP 8: LAUNCH ── -->
+                <div id="wizard-step-8" class="wizard-step" style="display: none;">
+                    <div style="text-align: center; margin-bottom: 28px;">
+                        <div id="wizard-launch-icon" style="margin-bottom: 16px;">
+                            <i class="fa-solid fa-spinner fa-spin" style="font-size: 2.8rem; color: var(--accent);"></i>
+                        </div>
+                        <h2 style="font-family: var(--font-heading); font-size: 1.8rem; font-weight: 700; margin-bottom: 8px;" id="wizard-launch-title">Verifying Systems...</h2>
+                        <p style="color: var(--text-muted); font-size: 0.95rem;" id="wizard-launch-subtitle">Running final health check before launching ALOY</p>
+                    </div>
+
+                    <div id="wizard-launch-checks" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px;"></div>
+
+                    <div id="wizard-launch-ready" style="display: none; background: rgba(74,222,128,0.08); border: 1px solid rgba(74,222,128,0.2); border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 24px;">
+                        <i class="fa-solid fa-circle-check" style="font-size: 2rem; color: #4ade80; margin-bottom: 10px; display: block;"></i>
+                        <div style="font-weight: 700; font-size: 1.1rem; color: #4ade80; margin-bottom: 4px;">✓ ALOY is Ready</div>
+                        <div style="font-size: 0.88rem; color: var(--text-muted);">All systems verified. Click Launch to begin.</div>
+                    </div>
+
+                    <div id="wizard-launch-warn" style="display: none; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); border-radius: 12px; padding: 16px; text-align: center; margin-bottom: 24px;">
+                        <i class="fa-solid fa-triangle-exclamation" style="color: #ef4444; margin-right: 8px;"></i>
+                        <span id="wizard-launch-warn-text" style="font-size: 0.9rem; color: var(--text-muted);"></span>
+                    </div>
+                </div>
+
+
+                <!-- ── NAVIGATION BUTTONS ── -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border);">
+                    <button id="btn-wizard-back" onclick="wizardBack()" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 10px; color: var(--text-muted); padding: 12px 22px; font-size: 0.95rem; cursor: pointer; display: none; align-items: center; gap: 8px; transition: all 0.2s;">
+                        <i class="fa-solid fa-arrow-left"></i> Back
+                    </button>
+                    <div></div>
+                    <button id="btn-wizard-next" onclick="wizardNext()" class="btn-primary" style="padding: 12px 28px; font-size: 1rem; min-width: 160px; justify-content: center;">
+                        Get Started <i class="fa-solid fa-arrow-right" style="margin-left: 8px;"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Footer credit -->
+            <div style="text-align: center; margin-top: 18px; font-size: 0.78rem; color: var(--text-muted); opacity: 0.6;">
+                ALOY v1.0.0 · Designed &amp; built by Dhanush A. · <a href="https://github.com/dhanush708" target="_blank" style="color: var(--accent); text-decoration: none;">GitHub</a>
+            </div>
+        </div>
+    </div>
+
+
+    <script src="/static/js/app.js?v=2"></script>
+</body>
+</html>

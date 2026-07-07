@@ -1,0 +1,45 @@
+# Python compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+.env
+.pytest_cache/
+.mypy_cache/
+
+# SQLite databases & local runtime state
+data/aloy.db
+data/aloy.db-shm
+data/aloy.db-wal
+data/backups/*
+data/running.tmp
+
+# Logs & task outputs
+*.log
+.system_generated/
+logs/
+tmp/
+temp/
+
+# Development output files
+aloy_stderr.txt
+aloy_stdout.txt
+
+# Build & distribution artifacts
+build/
+dist/
+
+# Auto-generated test reports
+reports/
+
+# IDE and OS specific
+.DS_Store
+.vscode/
+.idea/
+*.suo
+*.sln
+*.swp
