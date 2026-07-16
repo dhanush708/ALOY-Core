@@ -43,3 +43,11 @@ reports/
 *.suo
 *.sln
 *.swp
+# Root runtime files
+aloy.db
+aloy.db-shm
+aloy.db-wal
+running.tmp
+
+# Scratch workspace
+scratch/
