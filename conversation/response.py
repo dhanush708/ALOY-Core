@@ -15,6 +15,35 @@ class ResponseGenerationStage(PipelineStage):
         """Sets up the streaming generator in the context or consumes it asynchronously into the queue."""
         router = self.model_router
 
+        # Check for search failure and validate confidence
+        search_triggered = getattr(context, "search_triggered", False)
+        search_succeeded = getattr(context, "search_succeeded", False)
+
+        if search_triggered and not search_succeeded:
+            fail_msg = "I couldn't verify this information from reliable sources."
+            context.final_response = fail_msg
+            if context.event_queue is not None:
+                context.event_queue.put_nowait({
+                    "type": "meta",
+                    "intent": context.intent or "simple_chat",
+                    "model": context.model or "local",
+                    "search_status": "failed"
+                })
+                # Stream it token by token for smooth UI experience
+                words = fail_msg.split(" ")
+                for i, word in enumerate(words):
+                    space = " " if i > 0 else ""
+                    context.event_queue.put_nowait({
+                        "type": "token",
+                        "content": space + word
+                    })
+                    await asyncio.sleep(0.01)
+            else:
+                async def failed_stream() -> AsyncGenerator[str, None]:
+                    yield fail_msg
+                context.response_stream = failed_stream()
+            return context
+
         if context.event_queue is not None:
             # Real-time asynchronous stream execution
             full_response = []
@@ -24,10 +53,12 @@ class ResponseGenerationStage(PipelineStage):
             try:
                 # We yield the meta event if not already done
                 # (although it is done in Intent Detection, we make sure it exists)
+                search_status = "success" if (search_triggered and search_succeeded) else "local"
                 context.event_queue.put_nowait({
                     "type": "meta",
                     "intent": context.intent or "simple_chat",
-                    "model": context.model or "qwen3:14b"
+                    "model": context.model or "qwen3:14b",
+                    "search_status": search_status
                 })
                 
                 async for token in router.stream(

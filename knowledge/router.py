@@ -9,6 +9,7 @@ from tools.impl.web_search import WebSearchTool
 from project.manager import ProjectManager
 from .verification import SourceVerifier
 from .research_cache import ResearchCache
+from .search_pipeline import SearchPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,7 @@ class KnowledgeRouter:
         self.cache = ResearchCache(db_pool)
         self.project_mgr = ProjectManager(db_pool)
         self.search_tool = WebSearchTool()
+        self.search_pipeline = SearchPipeline(db_pool, model_router, self.search_tool)
 
     async def query_escalation(
         self,
@@ -112,42 +114,43 @@ class KnowledgeRouter:
 
         # Step 5: Internet Web Search
         logger.info("KnowledgeRouter: Step 5 - Internet Search.")
-        search_str = await self.search_tool.execute({"query": query}, {})
-        snippets = self._parse_ddg_results_to_snippets(search_str)
-        if snippets:
-            verified = await self.verifier.verify(query, snippets)
-            if verified["confidence_score"] >= 0.60:
-                logger.info(f"KnowledgeRouter: Internet Search HIT (score={verified['confidence_score']:.2f}).")
+        sources = await self.search_pipeline.execute_with_retry(query)
+        if sources:
+            ranked = self.search_pipeline.score_and_rank_sources(query, sources)
+            synthesis = await self.search_pipeline.synthesize_answer(query, ranked)
+            if synthesis["confidence"] >= 0.40 and "couldn't verify" not in synthesis["answer"].lower():
+                logger.info(f"KnowledgeRouter: Internet Search HIT (score={synthesis['confidence']:.2f}).")
                 res = {
-                    "answer": verified["answer"],
+                    "answer": synthesis["answer"],
                     "layer": "internet_search",
-                    "confidence": verified["confidence_score"],
-                    "sources": snippets[:3]
+                    "confidence": synthesis["confidence"],
+                    "sources": synthesis["sources"]
                 }
-                await self._store_temp_findings(query, verified["answer"], res["sources"], verified.get("lessons_learned", ""))
+                await self._store_temp_findings(query, synthesis["answer"], res["sources"], "Search Pipeline escalated synthesis.")
                 self.cache.set(query, res)
                 return res
 
         # Step 6: Community Sources (StackOverflow/GitHub)
         logger.info("KnowledgeRouter: Step 6 - Community Sources.")
         comm_query = f"{query} site:stackoverflow.com OR site:github.com"
-        comm_search = await self.search_tool.execute({"query": comm_query}, {})
-        comm_snippets = self._parse_ddg_results_to_snippets(comm_search)
-        if comm_snippets:
-            verified = await self.verifier.verify(query, comm_snippets)
-            logger.info(f"KnowledgeRouter: Community Sources complete (score={verified['confidence_score']:.2f}).")
-            res = {
-                "answer": verified["answer"],
-                "layer": "community_sources",
-                "confidence": verified["confidence_score"],
-                "sources": comm_snippets[:3]
-            }
-            await self._store_temp_findings(query, verified["answer"], res["sources"], verified.get("lessons_learned", ""))
-            self.cache.set(query, res)
-            return res
+        comm_sources = await self.search_pipeline.execute_with_retry(comm_query)
+        if comm_sources:
+            ranked_comm = self.search_pipeline.score_and_rank_sources(query, comm_sources)
+            synthesis_comm = await self.search_pipeline.synthesize_answer(query, ranked_comm)
+            if "couldn't verify" not in synthesis_comm["answer"].lower():
+                logger.info(f"KnowledgeRouter: Community Sources complete (score={synthesis_comm['confidence']:.2f}).")
+                res = {
+                    "answer": synthesis_comm["answer"],
+                    "layer": "community_sources",
+                    "confidence": synthesis_comm["confidence"],
+                    "sources": synthesis_comm["sources"]
+                }
+                await self._store_temp_findings(query, synthesis_comm["answer"], res["sources"], "Search Pipeline community synthesis.")
+                self.cache.set(query, res)
+                return res
 
         return {
-            "answer": "Escalation completed. Unable to find reliable information.",
+            "answer": "I couldn't verify this information from reliable sources.",
             "layer": "none",
             "confidence": 0.0,
             "sources": []

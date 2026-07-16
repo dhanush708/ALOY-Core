@@ -28,8 +28,8 @@ ROUTING_TABLE: Dict[str, Dict[str, Any]] = {
         "priority": Priority.CONVERSATION,
     },
     "simple_chat": {
-        "primary": MODELS_CONFIG["chat"]["name"],
-        "fallback": MODELS_CONFIG["coding"]["name"],
+        "primary": MODELS_CONFIG["vision"]["name"],
+        "fallback": MODELS_CONFIG["chat"]["name"],
         "priority": Priority.CONVERSATION,
     },
     "complex_chat": {
@@ -53,7 +53,7 @@ ROUTING_TABLE: Dict[str, Dict[str, Any]] = {
         "priority": Priority.CONVERSATION,
     },
     "agent_planning": {
-        "primary": MODELS_CONFIG["chat"]["name"],
+        "primary": MODELS_CONFIG["vision"]["name"],
         "fallback": MODELS_CONFIG["coding"]["name"],
         "priority": Priority.AGENT,
     },
@@ -63,13 +63,13 @@ ROUTING_TABLE: Dict[str, Dict[str, Any]] = {
         "priority": Priority.AGENT,
     },
     "memory_generation": {
-        "primary": MODELS_CONFIG["chat"]["name"],
-        "fallback": MODELS_CONFIG["coding"]["name"],
+        "primary": MODELS_CONFIG["vision"]["name"],
+        "fallback": MODELS_CONFIG["chat"]["name"],
         "priority": Priority.BACKGROUND,
     },
     "summarization": {
-        "primary": MODELS_CONFIG["chat"]["name"],
-        "fallback": MODELS_CONFIG["coding"]["name"],
+        "primary": MODELS_CONFIG["vision"]["name"],
+        "fallback": MODELS_CONFIG["chat"]["name"],
         "priority": Priority.BACKGROUND,
     },
     "embedding": {
@@ -84,23 +84,23 @@ ROUTING_TABLE: Dict[str, Dict[str, Any]] = {
     },
     # Catch-all defaults
     "memory_query": {
-        "primary": MODELS_CONFIG["chat"]["name"],
-        "fallback": MODELS_CONFIG["coding"]["name"],
+        "primary": MODELS_CONFIG["vision"]["name"],
+        "fallback": MODELS_CONFIG["chat"]["name"],
         "priority": Priority.CONVERSATION,
     },
     "tool_request": {
-        "primary": MODELS_CONFIG["chat"]["name"],
-        "fallback": MODELS_CONFIG["coding"]["name"],
+        "primary": MODELS_CONFIG["vision"]["name"],
+        "fallback": MODELS_CONFIG["chat"]["name"],
         "priority": Priority.CONVERSATION,
     },
     "planning_request": {
-        "primary": MODELS_CONFIG["chat"]["name"],
-        "fallback": MODELS_CONFIG["coding"]["name"],
+        "primary": MODELS_CONFIG["vision"]["name"],
+        "fallback": MODELS_CONFIG["chat"]["name"],
         "priority": Priority.CONVERSATION,
     },
     "meta_request": {
-        "primary": MODELS_CONFIG["chat"]["name"],
-        "fallback": MODELS_CONFIG["coding"]["name"],
+        "primary": MODELS_CONFIG["vision"]["name"],
+        "fallback": MODELS_CONFIG["chat"]["name"],
         "priority": Priority.CONVERSATION,
     },
 }
@@ -169,8 +169,12 @@ class ModelRouter:
         keep_alive = "10s" if priority == Priority.BACKGROUND else "5m"
 
         model = primary
+        selection_reason = f"resolved as primary for task '{task}'"
         if conversation_id and conversation_id in self._conversation_models:
             model = self._conversation_models[conversation_id]
+            selection_reason = f"conversation continuity lock for conversation '{conversation_id}'"
+
+        logger.info("ModelRouter.generate: selected model '%s' (reason: %s)", model, selection_reason)
 
         await self.coordinator.acquire(priority)
         try:
@@ -195,6 +199,7 @@ class ModelRouter:
 
             if fallback and fallback != model:
                 try:
+                    logger.info("ModelRouter.generate: falling back to model '%s' (reason: primary model failed)", fallback)
                     tokens_in = self.token_manager.count_tokens(prompt)
                     start_time = time.perf_counter()
                     result = await self._try_generate(fallback, prompt, options, task, keep_alive)
@@ -238,8 +243,12 @@ class ModelRouter:
         keep_alive = "10s" if priority == Priority.BACKGROUND else "5m"
 
         model = primary
+        selection_reason = f"resolved as primary for task '{task}'"
         if conversation_id and conversation_id in self._conversation_models:
             model = self._conversation_models[conversation_id]
+            selection_reason = f"conversation continuity lock for conversation '{conversation_id}'"
+
+        logger.info("ModelRouter.stream: selected model '%s' (reason: %s)", model, selection_reason)
 
         await self.coordinator.acquire(priority)
         start = time.perf_counter()

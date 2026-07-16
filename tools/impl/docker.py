@@ -1,7 +1,11 @@
 import asyncio
 import logging
+import sys
+import subprocess
 from typing import Dict, Any, List
 from tools.base import BaseTool, ToolMetadata
+
+CREATION_FLAGS = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +65,8 @@ class DockerTool(BaseTool):
         process = await asyncio.create_subprocess_exec(
             *full_command,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            stderr=asyncio.subprocess.PIPE,
+            creationflags=CREATION_FLAGS
         )
         
         try:

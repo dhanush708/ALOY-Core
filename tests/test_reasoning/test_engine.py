@@ -51,6 +51,14 @@ async def prompt_registry(db_pool):
         ["query", "output"]
     )
     
+    # Mock correction prompt
+    registry.register(
+        "reasoning.correct",
+        "1.0",
+        "Correct {query} {output} {contradictions} {assumptions} {incomplete}",
+        ["query", "output", "contradictions", "assumptions", "incomplete"]
+    )
+    
     yield registry
 
 @pytest_asyncio.fixture

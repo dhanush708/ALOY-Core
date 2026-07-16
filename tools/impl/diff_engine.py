@@ -45,9 +45,7 @@ class DiffEngineTool(BaseTool):
         dry_run = params.get("dry_run", False)
         
         if not os.path.exists(path):
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(path, "w", encoding="utf-8") as f:
-                f.write("")
+            raise FileNotFoundError(f"File not found: {path}")
             
         with open(path, "r", encoding="utf-8") as f:
             original_content = f.read()

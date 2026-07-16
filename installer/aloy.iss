@@ -48,6 +48,8 @@ UninstallDisplayIcon={app}\{#AppExeName}
 
 ; Windows requirements
 MinVersion=10.0
+ArchitecturesAllowed=x64
+ArchitecturesInstallIn64BitMode=x64
 PrivilegesRequiredOverridesAllowed=dialog
 
 ; Signing (fill in if you have a code signing certificate)
@@ -67,15 +69,18 @@ Source: "..\dist\ALOY\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs 
 
 [Icons]
 ; Start menu shortcut
-Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\assets\icons\aloy.ico"; Comment: "{#AppDescription}"
+Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\_internal\assets\icons\aloy.ico"; Comment: "{#AppDescription}"
 Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
 
 ; Desktop shortcut (if selected)
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\assets\icons\aloy.ico"; Comment: "{#AppDescription}"; Tasks: desktopicon
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\_internal\assets\icons\aloy.ico"; Comment: "{#AppDescription}"; Tasks: desktopicon
 
 [Run]
-; Launch ALOY after setup completes
+; Open ALOY after setup completes
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(AppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+
+; Add Windows Firewall exception for ALOY server (port 8000 — localhost only)
+Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""ALOY Local Server"" dir=in action=allow protocol=TCP localport=8000 remoteip=127.0.0.1"; StatusMsg: "Configuring firewall..."; Flags: runhidden
 
 [UninstallDelete]
 ; Clean up data folder on uninstall (optional — warn user first)
@@ -93,4 +98,21 @@ begin
     Result := False;
   end else
     Result := True;
+end;
+
+// After installation completes, prompt the user to download Ollama
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  ErrorCode: Integer;
+begin
+  if CurStep = ssPostInstall then begin
+    if MsgBox(
+      'ALOY requires Ollama to run AI models locally.' + #13#10 + #13#10 +
+      'Ollama is free, open-source, and takes about 2 minutes to install.' + #13#10 + #13#10 +
+      'Download Ollama now? (Recommended)',
+      mbConfirmation, MB_YESNO
+    ) = IDYES then begin
+      ShellExec('open', 'https://ollama.com/download/windows', '', '', SW_SHOW, ewNoWait, ErrorCode);
+    end;
+  end;
 end;

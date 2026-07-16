@@ -340,14 +340,26 @@
                         </div>
 
                         <!-- Active Session Details Display -->
-                        <div class="active-session-meta-box">
-                            <div class="meta-col">
-                                <span class="meta-label">Selected Goal:</span>
-                                <span id="active-agent-goal-display" class="meta-val">No active session selected</span>
+                        <div class="active-session-meta-box" style="display: flex; flex-direction: column; gap: 8px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                                <div class="meta-col">
+                                    <span class="meta-label">Selected Goal:</span>
+                                    <span id="active-agent-goal-display" class="meta-val">No active session selected</span>
+                                </div>
+                                <div class="meta-col-right">
+                                    <span class="meta-label">FSM State:</span>
+                                    <span id="active-agent-status-badge" class="badge-status status-gray">Idle</span>
+                                </div>
                             </div>
-                            <div class="meta-col-right">
-                                <span class="meta-label">FSM State:</span>
-                                <span id="active-agent-status-badge" class="badge-status status-gray">Idle</span>
+                            <div id="active-session-progress-details" style="display: none; border-top: 1px solid var(--border); padding-top: 8px; margin-top: 4px; font-size: 0.85rem; color: var(--text-muted); width: 100%;">
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; width: 100%;">
+                                    <div><strong>Progress:</strong> <span id="progress-pct" style="color: var(--accent); font-weight: 600;">0%</span></div>
+                                    <div><strong>Elapsed:</strong> <span id="progress-elapsed">0s</span></div>
+                                    <div><strong>ETA:</strong> <span id="progress-eta">N/A</span></div>
+                                    <div><strong>Active Model:</strong> <span id="progress-model" style="font-family: monospace;">None</span></div>
+                                    <div><strong>Retry Count:</strong> <span id="progress-retry">0</span></div>
+                                    <div><strong>Waiting:</strong> <span id="progress-waiting" style="color: var(--warning, #f59e0b);">None</span></div>
+                                </div>
                             </div>
                         </div>
                         

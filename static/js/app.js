@@ -562,6 +562,24 @@ document.addEventListener("DOMContentLoaded", () => {
                             activeModelEl.textContent = data.model || "phi4-mini";
                             activeIntentEl.textContent = data.intent || "simple_chat";
                             updateStatusIndicator("router", "Working", `Loading ${data.model || "model"}...`);
+                            
+                            if (data.search_status) {
+                                const badgeBox = bubble.querySelector(".knowledge-badges");
+                                badgeBox.style.display = "flex";
+                                let statusText = "";
+                                let statusClass = "";
+                                if (data.search_status === "success") {
+                                    statusText = "🌐 Used Live Web Search";
+                                    statusClass = "search-success";
+                                } else if (data.search_status === "failed") {
+                                    statusText = "⚠ Live Search Failed";
+                                    statusClass = "search-failed";
+                                } else {
+                                    statusText = "🧠 Answered from Local Knowledge";
+                                    statusClass = "search-local";
+                                }
+                                badgeBox.innerHTML = `<span class="badge-source ${statusClass}">${statusText}</span>`;
+                            }
                             break;
                             
                         case "token":
@@ -683,12 +701,36 @@ document.addEventListener("DOMContentLoaded", () => {
             formatCodeBlocks(bodyEl);
         }
         
-        if (metadata && metadata.sources) {
+        if (metadata) {
             const badgeBox = bubble.querySelector(".knowledge-badges");
-            badgeBox.style.display = "flex";
-            metadata.sources.forEach(src => {
-                badgeBox.innerHTML += `<span class="badge-source">${src}</span>`;
-            });
+            let hasBadges = false;
+            
+            if (metadata.search_status) {
+                badgeBox.style.display = "flex";
+                hasBadges = true;
+                let statusText = "";
+                let statusClass = "";
+                if (metadata.search_status === "success") {
+                    statusText = "🌐 Used Live Web Search";
+                    statusClass = "search-success";
+                } else if (metadata.search_status === "failed") {
+                    statusText = "⚠ Live Search Failed";
+                    statusClass = "search-failed";
+                } else {
+                    statusText = "🧠 Answered from Local Knowledge";
+                    statusClass = "search-local";
+                }
+                badgeBox.innerHTML += `<span class="badge-source ${statusClass}">${statusText}</span>`;
+            }
+            
+            if (metadata.sources) {
+                badgeBox.style.display = "flex";
+                hasBadges = true;
+                metadata.sources.forEach(src => {
+                    const label = (typeof src === "object" && src !== null) ? (src.title || src.url) : src;
+                    badgeBox.innerHTML += `<span class="badge-source">${label}</span>`;
+                });
+            }
         }
         
         if (role === "assistant" && msgId && content) {
@@ -1189,6 +1231,30 @@ document.addEventListener("DOMContentLoaded", () => {
             // Update status badge
             activeAgentStatusBadge.textContent = statusData.status;
             activeAgentStatusBadge.className = `badge-status status-${statusData.status}`;
+            
+            // Expose rich progress metadata if present
+            const progressBox = document.getElementById("active-session-progress-details");
+            if (progressBox) {
+                let meta = {};
+                if (statusData.metadata) {
+                    try {
+                        meta = typeof statusData.metadata === "string" ? JSON.parse(statusData.metadata) : statusData.metadata;
+                    } catch (e) {
+                        console.error("Failed to parse session metadata:", e);
+                    }
+                }
+                if (meta && (meta.progress_pct !== undefined || meta.elapsed_seconds !== undefined)) {
+                    progressBox.style.display = "block";
+                    document.getElementById("progress-pct").textContent = `${meta.progress_pct || 0}%`;
+                    document.getElementById("progress-elapsed").textContent = `${meta.elapsed_seconds || 0}s`;
+                    document.getElementById("progress-eta").textContent = meta.eta_seconds !== undefined ? `${meta.eta_seconds}s` : "N/A";
+                    document.getElementById("progress-model").textContent = meta.current_model || "None";
+                    document.getElementById("progress-retry").textContent = meta.retry_count || 0;
+                    document.getElementById("progress-waiting").textContent = (meta.waiting_reason && meta.waiting_reason !== "None") ? meta.waiting_reason : "None";
+                } else {
+                    progressBox.style.display = "none";
+                }
+            }
             
             // Enable/disable control buttons
             btnPauseAgent.disabled = statusData.status !== "executing";

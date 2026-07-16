@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 class ResearchCache:
     """Persistent SQLite-backed cache for general web search results with TTL support."""
 
-    def __init__(self, db_pool, ttl_seconds: int = 86400):
+    def __init__(self, db_pool, ttl_seconds: int = 600):
         self.db_pool = db_pool
         self.ttl_seconds = ttl_seconds
         self._ensure_cache_table()

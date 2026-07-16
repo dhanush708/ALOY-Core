@@ -185,7 +185,7 @@ async def test_model_router_keep_alive():
     
     # Verify keep_alive was passed as "10s"
     client_mock.generate.assert_called_with(
-        "qwen3:8b", "Synthesize observations.", None, keep_alive="10s"
+        "phi4-mini:latest", "Synthesize observations.", None, keep_alive="10s"
     )
     
     # Test conversation priority -> keep_alive should be "5m"

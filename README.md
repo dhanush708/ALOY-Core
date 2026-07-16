@@ -8,7 +8,7 @@
   <a href="https://www.sqlite.org/index.html"><img src="https://img.shields.io/badge/SQLite-3-lightgrey.svg?style=for-the-badge&logo=sqlite&logoColor=white" alt="SQLite"></a>
   <a href="https://ollama.com/"><img src="https://img.shields.io/badge/Ollama-Local%20AI-orange.svg?style=for-the-badge&logo=ollama&logoColor=white" alt="Ollama"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Proprietary%20EULA-red.svg?style=for-the-badge" alt="License"></a>
-  <img src="https://img.shields.io/badge/Tests-233%20Passed-brightgreen.svg?style=for-the-badge&logo=pytest&logoColor=white" alt="Tests Passing">
+  <img src="https://img.shields.io/badge/Tests-531%20Passed-brightgreen.svg?style=for-the-badge&logo=pytest&logoColor=white" alt="Tests Passing">
   <img src="https://img.shields.io/badge/Platform-Windows%2010%2B-blue.svg?style=for-the-badge&logo=windows&logoColor=white" alt="Platform">
   <img src="https://img.shields.io/badge/Version-1.0.0-informational.svg?style=for-the-badge" alt="Version">
 </p>
@@ -60,10 +60,10 @@ ALOY does not send your data, conversations, or code to any cloud service. Every
 | Subsystem | Capabilities |
 | :--- | :--- |
 | **Conversation Engine** | SSE streaming with inline cursor, automatic conversation naming, and branched timeline navigation. |
-| **Memory System** | Multi-tier vector + FTS5 search with decay scoring, tag groups, and idle-time contradiction audits. |
+| **Memory System** | Multi-tier vector + FTS5 search with Reciprocal Rank Fusion scoring, memory decay, tag groups, and idle-time contradiction audits. |
 | **Reasoning Engine** | Multi-stage thought execution (Draft → Refine → Verify) with real-time reasoning console. |
 | **Knowledge Router** | 6-layer progressive query routing (Memory → Workspace → Docs → Web Search) to minimize hallucinations. |
-| **Agent Runtime Grid** | Planner, Coder, Tester, Debugger, and Documenter agents with Git state checkpointing and rollback. |
+| **Agent Runtime Grid** | Planner, Coder, Tester, Debugger, and Documenter agents with Git state checkpointing, parallel execution, and rollback. |
 | **Tool Sandbox** | Boundary-checked file editors, terminal shells, Docker controls, and Python runners with explicit confirmation gates. |
 | **Premium UI/UX** | Dark, Light, and OLED themes with Outfit/Inter typography, responsive panels, and live hardware telemetry gauges. |
 
@@ -80,7 +80,7 @@ sequenceDiagram
     FastAPI Server->>Event Bus: Publish "message.received" event
     Event Bus->>Identity Engine: Resolve creator + user profile constraints
     Event Bus->>Memory Manager: Run Hybrid Search (Vector + FTS5)
-    Event Bus->>Model Router: Route to target local model (e.g. Phi-4)
+    Event Bus->>Model Router: Route to target local model (e.g. Qwen3)
     Model Router->>Ollama: Request generation stream (SSE)
     Ollama-->>FastAPI Server: Stream response tokens
     FastAPI Server->>Prompt Integrity: Filter unclosed tags & headers
@@ -114,7 +114,7 @@ stateDiagram-v2
 | **Backend** | Python 3.11, FastAPI, Uvicorn (ASGI), Asyncio |
 | **Database** | SQLite (WAL mode), `sqlite-vec` (vector search), FTS5 (full-text search) |
 | **AI Engine** | Ollama (local model server), `nomic-embed-text` (semantic embeddings) |
-| **Testing** | Pytest, Pytest-Asyncio, stress-test suites (233 test cases) |
+| **Testing** | Pytest, Pytest-Asyncio, stress-test suites (531 test cases) |
 
 ---
 
@@ -125,7 +125,7 @@ stateDiagram-v2
 - **OS**: Windows 10 or higher (64-bit)
 - **Python**: 3.11 or higher *(developer installation only)*
 - **Ollama**: Running locally — [download here](https://ollama.com/)
-- **GPU**: NVIDIA GPU with 6+ GB VRAM recommended; CPU-only works with smaller models
+- **GPU**: Dedicated GPU with 8+ GB VRAM recommended; CPU-only works but is slower.
 
 ### Option 1 — Windows Installer *(Recommended)*
 
@@ -169,17 +169,15 @@ The server starts on `http://127.0.0.1:8000` and your browser opens automaticall
 
 2. **Pull the required models:**
    ```bash
-   ollama pull phi4:latest
-   ollama pull qwen2.5-coder:7b
+   ollama pull qwen3:14b
+   ollama pull qwen2.5-coder:14b
+   ollama pull deepseek-r1:14b
    ollama pull nomic-embed-text:latest
    ```
 
 3. **Launch ALOY** via the installer shortcut or `python run.py`.
 
 4. **Complete the onboarding wizard.** On first launch, ALOY displays a setup overlay where you can enter your name, preferred greeting, and preferences. All data is stored locally — nothing leaves your machine.
-
-> [!NOTE]
-> If Ollama is unreachable or required models are missing, ALOY displays a dependency overlay with exact `ollama pull` commands to run. No guesswork required.
 
 ---
 
@@ -189,11 +187,10 @@ ALOY maps cognitive tasks to the most appropriate local model to balance quality
 
 | Task | Default Model | Context | Min VRAM |
 | :--- | :--- | :--- | :--- |
-| General Chat & Dialogue | `phi4:latest` | 8K | 6 GB |
-| Step Reasoning & Planning | `phi4:latest` | 8K | 6 GB |
-| Agent Coding & Execution | `qwen2.5-coder:7b` | 16K | 8 GB |
-| Task Planning & Architecture | `qwen2.5-coder:7b` | 16K | 8 GB |
-| Semantic Vector Embeddings | `nomic-embed-text` | 2K | 1 GB |
+| General Chat & Dialogue | `qwen3:14b` | 8K | 8 GB |
+| Step Reasoning & Planning | `deepseek-r1:14b` | 16K | 8 GB |
+| Agent Coding & Execution | `qwen2.5-coder:14b` | 16K | 8 GB |
+| Semantic Vector Embeddings | `nomic-embed-text:latest` | 2K | 1 GB |
 
 Model assignments are fully configurable via `config/models.yaml`.
 
@@ -203,7 +200,7 @@ Model assignments are fully configurable via `config/models.yaml`.
 
 ```
 aloy/
-├── agent/          # Multi-agent FSM grid runtime, metrics, lock manager
+├── agent/          # Multi-agent FSM grid runtime, metrics, lock manager, scheduler
 ├── api/            # FastAPI route groups (Conversation, Agent, Telemetry, Profile)
 ├── config/         # YAML configs for system prompts, models, and fallback chains
 ├── conversation/   # SSE streaming adapters, Markdown parser, conversation templates
@@ -213,12 +210,12 @@ aloy/
 ├── identity/       # Creator metadata, profile engine, prompt integrity filters
 ├── installer/      # PyInstaller spec and Inno Setup script for Windows packaging
 ├── kernel/         # Async event bus, boot loader, service registry, prompt registry
-├── knowledge/      # Progressive query router, DDG crawler, documentation cache
+├── knowledge/      # Progressive query router, DDG crawler, documentation cache, search pipeline
 ├── memory/         # Episodic/semantic memory store, RRF scoring, decay management
 ├── models/         # Ollama client, model router, performance tracker, fallback chains
 ├── security/       # Confirmation workflow, capability checks, authorization gates
 ├── static/         # SPA frontend (index.html, app.js, style.css)
-├── tests/          # Pytest suite — unit, integration, stress, and performance tests
+├── tests/          # Pytest suite — unit, integration, stress, and performance tests (531 tests)
 ├── tools/          # Tool registry, sandbox executors (file, terminal, git, docker)
 ├── run.py          # Application entry point (browser auto-launch + Uvicorn server)
 └── requirements.txt
@@ -235,7 +232,8 @@ aloy/
 $$\text{RRF Score} = \frac{1}{60 + \text{Rank}_{\text{FTS}}} + \frac{1}{60 + \text{Rank}_{\text{Vector}}}$$
 
 - **Async Connection Pool**: WAL-mode SQLite pool with distinct read/write transaction limits — zero database lock errors under concurrent load.
-- **Test Coverage**: 233 collected pytest cases covering unit, integration, stress, and agent FSM execution scenarios.
+- **Concurrent Search**: Parallel web search rewriter fetches fresh insights in under 2 seconds.
+- **Test Coverage**: 531 collected pytest cases covering unit, integration, stress, and agent FSM execution scenarios.
 
 ### Security
 
@@ -245,7 +243,15 @@ $$\text{RRF Score} = \frac{1}{60 + \text{Rank}_{\text{FTS}}} + \frac{1}{60 + \te
 
 ---
 
+## 🗺️ Roadmap
 
+| Version | Timeline | Focus |
+| :--- | :--- | :--- |
+| **v1.1** | Q3 2026 | Dynamic workspace-defined tool plugins; virtualenv-scoped packaging to reduce installer size |
+| **v1.2** | Q4 2026 | Shared workspaces and cross-session state sync |
+| **v1.5** | Q2 2027 | Self-evolution microkernel — autonomously compiles and improves its own backend prompts |
+
+---
 
 ## 🐛 Bug Reporting & Support
 

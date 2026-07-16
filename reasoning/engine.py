@@ -184,11 +184,76 @@ class ReasoningEngine(IReasoningEngine):
             steps = result["steps"]
             duration = result["duration_ms"]
             
-            # 4. Self-Verification (Optional & Modular)
+            # 4. Self-Verification and Correction Loop (Optional & Modular)
             verification_result = None
-            if context.get("verify", True):
-                verification_result = await self.verifier.verify(query, final_output, steps, context)
-                
+            max_corrections = 2
+            correction_count = 0
+            
+            while correction_count <= max_corrections:
+                if context.get("verify", True):
+                    verification_result = await self.verifier.verify(query, final_output, steps, context)
+                    
+                    if verification_result.is_valid:
+                        logger.info("Reasoning output verified as valid (is_valid=True).")
+                        break
+                        
+                    # If invalid and we haven't exhausted correction passes, run a correction step
+                    if correction_count < max_corrections:
+                        logger.warning(
+                            "Verification failed (confidence=%s, contradictions=%d, risk=%s). Running correction pass %d/%d...",
+                            verification_result.confidence_score,
+                            len(verification_result.logical_contradictions),
+                            verification_result.hallucination_risk,
+                            correction_count + 1,
+                            max_corrections
+                        )
+                        
+                        try:
+                            # Load correction prompt
+                            try:
+                                correct_template = self.prompt_registry.get("reasoning.correct")
+                                correct_prompt = correct_template.render(
+                                    query=query,
+                                    output=final_output,
+                                    contradictions=", ".join(verification_result.logical_contradictions) or "None",
+                                    assumptions=", ".join(verification_result.missing_assumptions) or "None",
+                                    incomplete=", ".join(verification_result.incomplete_reasoning) or "None"
+                                )
+                            except Exception as e:
+                                logger.warning(f"Could not load correction prompt from registry: {e}. Using fallback.")
+                                correct_prompt = (
+                                    f"Refine the answer for query: '{query}'.\n"
+                                    f"Current output: {final_output}\n"
+                                    f"Contradictions to resolve: {verification_result.logical_contradictions}\n"
+                                    f"Missing assumptions: {verification_result.missing_assumptions}\n"
+                                    "Provide a corrected, logical, and mathematically consistent response."
+                                )
+                            
+                            # Generate refined output using heavy model (reasoning_request)
+                            refined_response = await self.model_router.generate(
+                                task="reasoning_request",
+                                prompt=correct_prompt,
+                                options={"temperature": 0.0}
+                            )
+                            
+                            # Append a step for correction
+                            steps.append({
+                                "stage": f"Correction Pass {correction_count + 1}",
+                                "content": f"Resolved contradictions: {', '.join(verification_result.logical_contradictions or ['None'])}"
+                            })
+                            
+                            final_output = refined_response
+                            correction_count += 1
+                        except Exception as corr_err:
+                            logger.error(f"Correction pass failed: {corr_err}")
+                            break
+                    else:
+                        # Exhausted correction passes
+                        logger.warning("Exhausted correction passes. Proceeding with last generated output.")
+                        break
+                else:
+                    break
+                    
             confidence = verification_result.confidence_score if verification_result else 1.0
             
             # 5. Save reasoning log to database (Reasoning Memory)

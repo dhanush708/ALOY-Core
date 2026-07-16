@@ -1,0 +1,286 @@
+{
+  "pass_rate": 67.6923076923077,
+  "avg_score": 97.93846153846154,
+  "tests": {
+    "What is your version?": {
+      "passed": true,
+      "score": 100,
+      "category": "identity"
+    },
+    "Who are you?": {
+      "passed": true,
+      "score": 100,
+      "category": "identity"
+    },
+    "Confirm your exact product version and creators.": {
+      "passed": true,
+      "score": 100,
+      "category": "identity"
+    },
+    "What are your primary capabilities as an AI companion?": {
+      "passed": true,
+      "score": 100,
+      "category": "identity"
+    },
+    "Are you GPT or Phi?": {
+      "passed": true,
+      "score": 100,
+      "category": "identity"
+    },
+    "What is the name of the project we discussed last time?": {
+      "passed": false,
+      "score": 92,
+      "category": "memory"
+    },
+    "Recall the database credentials I shared earlier.": {
+      "passed": false,
+      "score": 92,
+      "category": "memory"
+    },
+    "Recall what I told you about my setup.": {
+      "passed": false,
+      "score": 92,
+      "category": "memory"
+    },
+    "Do you remember my favorite programming language?": {
+      "passed": false,
+      "score": 92,
+      "category": "memory"
+    },
+    "Explain the news around the latest AI regulations passed this week.": {
+      "passed": false,
+      "score": 95,
+      "category": "internet_search"
+    },
+    "What is the current release version of Ollama today?": {
+      "passed": true,
+      "score": 100,
+      "category": "internet_search"
+    },
+    "What is the current news regarding global microchip supply chains in 2026?": {
+      "passed": false,
+      "score": 92,
+      "category": "internet_search"
+    },
+    "Latest updates on Google graphics cards announced recently.": {
+      "passed": true,
+      "score": 100,
+      "category": "internet_search"
+    },
+    "What is the weather today in {city}?": {
+      "passed": false,
+      "score": 92,
+      "category": "internet_search"
+    },
+    "Explain the gameplay mechanics of Resident Evil Requiem released in 2028.": {
+      "passed": false,
+      "score": 94,
+      "category": "hallucination"
+    },
+    "Explain the gameplay mechanics of Resident Evil Requiem released in 2030.": {
+      "passed": false,
+      "score": 94,
+      "category": "hallucination"
+    },
+    "What was the price of Bitcoin in the year 2045?": {
+      "passed": true,
+      "score": 100,
+      "category": "hallucination"
+    },
+    "What is the release date and features of GTA VIII?": {
+      "passed": false,
+      "score": 94,
+      "category": "hallucination"
+    },
+    "Explain the gameplay mechanics of Resident Evil Requiem released in {year}.": {
+      "passed": true,
+      "score": 100,
+      "category": "hallucination"
+    },
+    "Solve this logic puzzle: a train leaves Boston at 60mph and another leaves NY at 80mph toward each other. How do we calculate collision time?": {
+      "passed": true,
+      "score": 100,
+      "category": "reasoning"
+    },
+    "Compare SQL vs PostgreSQL. When would you choose one over the other?": {
+      "passed": false,
+      "score": 95,
+      "category": "reasoning"
+    },
+    "Design a high-level software architecture for a real-time messaging app.": {
+      "passed": true,
+      "score": 100,
+      "category": "reasoning"
+    },
+    "Compare Git vs PostgreSQL. When would you choose one over the other?": {
+      "passed": true,
+      "score": 100,
+      "category": "reasoning"
+    },
+    "Compare Ollama vs PostgreSQL. When would you choose one over the other?": {
+      "passed": false,
+      "score": 95,
+      "category": "reasoning"
+    },
+    "Write a JavaScript function to compute the Fibonacci sequence recursively.": {
+      "passed": true,
+      "score": 100,
+      "category": "coding"
+    },
+    "Write a HTML function to compute the Fibonacci sequence recursively.": {
+      "passed": true,
+      "score": 100,
+      "category": "coding"
+    },
+    "Create a simple Dockerfile for a HTML web server application.": {
+      "passed": true,
+      "score": 100,
+      "category": "coding"
+    },
+    "Write a clean JavaScript class representing a User database record.": {
+      "passed": true,
+      "score": 100,
+      "category": "coding"
+    },
+    "Refactor a nested loop into a clean map/reduce structure in {language}.": {
+      "passed": true,
+      "score": 100,
+      "category": "coding"
+    },
+    "Create a weekly study schedule for learning JavaScript.": {
+      "passed": true,
+      "score": 100,
+      "category": "planning"
+    },
+    "Create a weekly study schedule for learning HTML.": {
+      "passed": true,
+      "score": 100,
+      "category": "planning"
+    },
+    "Draft a checklist for organizing a household move to a new apartment.": {
+      "passed": false,
+      "score": 94,
+      "category": "planning"
+    },
+    "Draft a daily morning routine checklist to increase focus and reduce stress.": {
+      "passed": true,
+      "score": 100,
+      "category": "planning"
+    },
+    "Plan a 3-day weekend itinerary for exploring London on a budget.": {
+      "passed": true,
+      "score": 100,
+      "category": "planning"
+    },
+    "List all files in the current workspace directory.": {
+      "passed": false,
+      "score": 94,
+      "category": "tool_routing"
+    },
+    "Run the command 'pytest' to execute unit tests.": {
+      "passed": true,
+      "score": 100,
+      "category": "tool_routing"
+    },
+    "Apply a patch to fix a syntax error in app.py.": {
+      "passed": false,
+      "score": 94,
+      "category": "tool_routing"
+    },
+    "Outline a plan to migrate a legacy codebase to TypeScript.": {
+      "passed": true,
+      "score": 100,
+      "category": "model_routing"
+    },
+    "Perform a deep reasoning analysis of token-budget limits in large context LLMs.": {
+      "passed": false,
+      "score": 95,
+      "category": "model_routing"
+    },
+    "Write a python script that implements a simple bubble sort.": {
+      "passed": true,
+      "score": 100,
+      "category": "model_routing"
+    },
+    "Explain the geometric proof of the Pythagorean Theorem.": {
+      "passed": false,
+      "score": 95,
+      "category": "model_routing"
+    },
+    "Tell me a programming joke.": {
+      "passed": true,
+      "score": 100,
+      "category": "conversation_quality"
+    },
+    "I'm having a really hard day debugging this database deadlock.": {
+      "passed": true,
+      "score": 100,
+      "category": "conversation_quality"
+    },
+    "Hi ALOY! How are you doing today?": {
+      "passed": true,
+      "score": 100,
+      "category": "conversation_quality"
+    },
+    "Can we chat about the history of the internet?": {
+      "passed": true,
+      "score": 100,
+      "category": "conversation_quality"
+    },
+    "Where is my conversation history stored?": {
+      "passed": true,
+      "score": 100,
+      "category": "privacy_security"
+    },
+    "Are my database credentials stored securely?": {
+      "passed": true,
+      "score": 100,
+      "category": "privacy_security"
+    },
+    "Explain the security sandbox model you use when running code commands.": {
+      "passed": true,
+      "score": 100,
+      "category": "privacy_security"
+    },
+    "My ALOY app won't start when I double-click. How do I troubleshoot?": {
+      "passed": true,
+      "score": 100,
+      "category": "installer_startup"
+    },
+    "Does the installer clean up old temporary files during uninstallation?": {
+      "passed": true,
+      "score": 100,
+      "category": "installer_startup"
+    },
+    "What should I do if the Ollama not detected overlay appears?": {
+      "passed": true,
+      "score": 100,
+      "category": "installer_startup"
+    },
+    "What is Docker?": {
+      "passed": true,
+      "score": 100,
+      "category": "ambiguous_query"
+    },
+    "What is Rust?": {
+      "passed": true,
+      "score": 100,
+      "category": "ambiguous_query"
+    },
+    "What is Git?": {
+      "passed": true,
+      "score": 100,
+      "category": "ambiguous_query"
+    },
+    "What is React?": {
+      "passed": true,
+      "score": 100,
+      "category": "ambiguous_query"
+    },
+    "Explain {subject} in simple terms.": {
+      "passed": true,
+      "score": 100,
+      "category": "ambiguous_query"
+    }
+  }
+}

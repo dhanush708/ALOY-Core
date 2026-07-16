@@ -6,11 +6,12 @@ This guide is designed for engineers and contributors looking to develop, test, 
 
 ## 1. Testing Subsystems
 
-ALOY maintains an automated test suite containing **233 unit, integration, and stress tests**.
+ALOY maintains an automated test suite containing **531 unit, integration, and stress tests** currently passing.
 
 ### Test Directory Layout:
 * `tests/test_kernel/`: Verifies event bus concurrency, service registrations, and kernel booted status.
 * `tests/test_memory/`: Asserts episodic vector search correctness, SQLite-vec connection bindings, and decay merges.
+* `tests/test_knowledge/`: Validates search pipeline concurrency, caching, retries, scoring, synthesis, and routing logic.
 * `tests/test_stress/`: Stress tests simulating high load (concurrency, SQLite locks, tool injections, memory spikes).
 * `tests/test_tools/`: Validates sandbox boundaries and filesystem isolation properties.
 

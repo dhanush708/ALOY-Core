@@ -1,13 +1,44 @@
 import logging
 import importlib
-import pkgutil
+import importlib.util
 import hashlib
+import sys
+from pathlib import Path
 from datetime import datetime, timezone
 from typing import List, Dict, Any
 
 from .connection import DatabaseConnectionPool
 
 logger = logging.getLogger(__name__)
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Migration Registry
+#
+# pkgutil.iter_modules() does NOT work inside a PyInstaller frozen bundle.
+# The migrations are bundled as *data files* (not in PYZ), so they exist on
+# disk at _internal/database/migrations/*.py, but the package __path__ is
+# not correctly wired in the frozen importer.
+#
+# Fix: Use an explicit ordered list. To add a migration, append its name here.
+# The Migrator will import it via importlib, falling back to file-based loading
+# (importlib.util.spec_from_file_location) for frozen deployments.
+# ═══════════════════════════════════════════════════════════════════════════
+
+MIGRATION_NAMES: List[str] = [
+    "001_initial",
+    "002_security",
+    "003_memory_tables",
+    "004_vector_search",
+    "005_conversation_tables",
+    "006_prompt_registry",
+    "007_reasoning_memory",
+    "008_user_feedback",
+    "009_advanced_memory",
+    "010_project_management",
+    "011_agent_tables",
+    "012_telemetry",
+    "013_evolution",
+]
 
 class MigrationStatus:
     def __init__(self, name: str, applied_at: str = None, checksum: str = None):
@@ -42,30 +73,78 @@ class Migrator:
                 for row in cursor.fetchall()
             }
             
-    def _get_available_migrations(self) -> List[Any]:
+    def _import_migration_module(self, module_name: str):
+        """Import a migration module — works in both normal and frozen mode."""
+        full_name = f"{self.migrations_pkg}.{module_name}"
+
+        # Tier 1: standard importlib (works in dev; may work in frozen if module is in PYZ)
         try:
-            pkg = importlib.import_module(self.migrations_pkg)
-        except ImportError:
-            logger.warning(f"Migrations package {self.migrations_pkg} not found.")
-            return []
-            
+            return importlib.import_module(full_name)
+        except (ImportError, ModuleNotFoundError):
+            pass
+
+        # Tier 2: file-based loading (always works because migrations are bundled as datas)
+        # In frozen mode:  _internal/database/migrations/<module_name>.py
+        # In dev mode:     <project_root>/database/migrations/<module_name>.py
+        if getattr(sys, "frozen", False):
+            migration_file = Path(sys._MEIPASS) / "database" / "migrations" / f"{module_name}.py"
+        else:
+            # Derive path from the package location
+            try:
+                pkg = importlib.import_module(self.migrations_pkg)
+                migration_file = Path(pkg.__file__).parent / f"{module_name}.py"
+            except Exception:
+                migration_file = Path("database") / "migrations" / f"{module_name}.py"
+
+        if not migration_file.exists():
+            logger.error(f"Migration file not found: {migration_file}")
+            return None
+
+        spec = importlib.util.spec_from_file_location(full_name, str(migration_file))
+        mod = importlib.util.module_from_spec(spec)
+        try:
+            spec.loader.exec_module(mod)
+        except Exception as exc:
+            logger.error(f"Failed to load migration {module_name} from {migration_file}: {exc}")
+            return None
+
+        return mod
+
+    def _get_available_migrations(self) -> List[Any]:
+        """Return all known migrations in order, using frozen-safe loading."""
         migrations = []
-        for _, module_name, _ in pkgutil.iter_modules(pkg.__path__):
-            mod = importlib.import_module(f"{self.migrations_pkg}.{module_name}")
-            if hasattr(mod, "up") and hasattr(mod, "down"):
-                # Use source code to generate a checksum
+        for module_name in MIGRATION_NAMES:
+            mod = self._import_migration_module(module_name)
+            if mod is None:
+                logger.warning(f"Skipping migration {module_name}: could not be loaded.")
+                continue
+            if not (hasattr(mod, "up") and hasattr(mod, "down")):
+                logger.warning(f"Skipping {module_name}: missing up() or down() function.")
+                continue
+
+            # Compute checksum from source file content for reproducibility
+            try:
                 import inspect
                 source = inspect.getsource(mod)
-                checksum = hashlib.sha256(source.encode()).hexdigest()
-                migrations.append({
-                    "name": module_name,
-                    "up": mod.up,
-                    "down": mod.down,
-                    "checksum": checksum
-                })
-        
-        # Sort alphabetically (so 001_..., 002_... run in order)
-        migrations.sort(key=lambda x: x["name"])
+            except Exception:
+                # Fallback: read file directly
+                try:
+                    file_path = getattr(mod, "__file__", None)
+                    if file_path and Path(file_path).exists():
+                        source = Path(file_path).read_text(encoding="utf-8")
+                    else:
+                        source = module_name  # last resort
+                except Exception:
+                    source = module_name
+
+            checksum = hashlib.sha256(source.encode()).hexdigest()
+            migrations.append({
+                "name": module_name,
+                "up": mod.up,
+                "down": mod.down,
+                "checksum": checksum,
+            })
+
         return migrations
         
     async def migrate(self) -> List[str]:

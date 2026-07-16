@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Dynamic Onboarding & Profiles**: Glassmorphic onboarding overlays blocking interface navigation until a user profile is configured.
-- **Dynamic Model Configuration**: Centralized model config in `models/config.py` defining chat (`phi4-mini`), coding (`qwen2.5-coder`), vector embeddings (`nomic-embed-text`), and reasoning (`deepseek-r1`) specifications.
+- **Dynamic Model Configuration**: Centralized model config in `models/config.py` defining chat (`qwen3:14b`), coding (`qwen2.5-coder:14b`), vector embeddings (`nomic-embed-text:latest`), and reasoning (`deepseek-r1:14b`) specifications.
 - **Startup Dependency & Hardware Audit**: `/api/system/health` checks database pools, workspace write permissions, Ollama connectivity, required model pull verification, RAM, disk space, and GPU/VRAM acceleration compatibility reports.
 - **Profile Import/Export**: Support to export user profile configurations as JSON attachments and import them back for cross-machine migration.
 - **Global Error Recovery Page**: Full-screen crash recovery overlay catching connection failures and offering bug reporting and client logs downloads.

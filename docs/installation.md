@@ -9,8 +9,8 @@ This document provides step-by-step instructions to configure, install, and run 
 ALOY runs completely on your local hardware. Before installing, ensure your system meets the following specifications:
 * **Python**: Version 3.11.x (highly recommended). Python 3.12 is also supported.
 * **Ollama**: Installed and running in the background. Download from [ollama.com](https://ollama.com/).
-* **Memory (RAM)**: 16 GB minimum (32 GB recommended to run 7B/8B models comfortably).
-* **GPU**: Dedicated NVIDIA GPU with 6+ GB VRAM (for CUDA acceleration) or Apple Silicon Mac (M1/M2/M3 with unified memory).
+* **Memory (RAM)**: 16 GB minimum (32 GB recommended to run 14B models comfortably).
+* **GPU**: Dedicated NVIDIA GPU with 8+ GB VRAM (for CUDA acceleration) or Apple Silicon Mac (M1/M2/M3 with unified memory).
 
 ---
 
@@ -89,16 +89,19 @@ ALOY runs completely on your local hardware. Before installing, ensure your syst
 
 ## 📥 Model Installation
 
-Verify that Ollama is active. Open a shell and pull the primary conversation and coding models:
+Verify that Ollama is active. Open a shell and pull the primary conversation, coding, reasoning, and text embedding models:
 
 ```bash
-# Pull conversation model (Phi-4, ~4.7GB)
-ollama pull phi4:latest
+# Pull primary conversation model (Qwen 3 14B, ~9GB)
+ollama pull qwen3:14b
 
-# Pull code generation model (Qwen 2.5 Coder, ~4.7GB)
-ollama pull qwen2.5-coder:latest
+# Pull code generation model (Qwen 2.5 Coder 14B, ~9GB)
+ollama pull qwen2.5-coder:14b
 
-# Pull text embedding model (Nomic, ~270MB)
+# Pull reasoning model (DeepSeek R1 14B, ~9GB)
+ollama pull deepseek-r1:14b
+
+# Pull text embedding model (Nomic Embed Text, ~270MB)
 ollama pull nomic-embed-text:latest
 ```
 

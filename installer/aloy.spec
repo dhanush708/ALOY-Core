@@ -75,7 +75,45 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['tkinter', 'matplotlib', 'numpy', 'scipy', 'PIL'],
+    excludes=[
+        # GUI toolkits (ALOY is browser-based — no desktop GUI needed)
+        'tkinter', '_tkinter',
+        # Game engine (not used)
+        'pygame', 'pygame._sdl2',
+        # Local ML/DL frameworks (ALOY delegates all inference to Ollama)
+        'torch', 'torchvision', 'torchaudio',
+        'tensorflow', 'tensorflow_core', 'tensorflow_estimator',
+        'keras',
+        'transformers',
+        'onnxruntime',
+        'onnx',
+        # Scientific computing (not used)
+        'numpy', 'scipy',
+        'sklearn', 'scikit_learn',
+        'pandas',
+        'matplotlib', 'mpl_toolkits',
+        'numba', 'llvmlite',
+        # NLP toolkits (ALOY uses tiktoken/Ollama — not these)
+        'spacy', 'thinc', 'blis', 'cymem', 'preshed', 'srsly',
+        'nltk',
+        # Image processing (not used in server)
+        'PIL', 'cv2',
+        # Cloud storage SDKs (not used)
+        'boto3', 'botocore', 's3transfer',
+        'google.cloud', 'google_cloud_storage',
+        # Big data / serialization (not used)
+        'pyarrow', 'h5py', 'lmdb', 'msgpack',
+        'ml_dtypes',
+        # AV/media codecs (not used)
+        'av',
+        # Protobuf tooling (gRPC generated code — not needed at runtime)
+        'grpc_tools',
+        # Testing frameworks (never ship test deps)
+        'pytest', 'pytest_asyncio',
+        # Misc unused
+        'tensorboard',
+        'optree',
+    ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
@@ -100,7 +138,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='../assets/icons/aloy.ico',  # Windows taskbar/shortcut icon
+    icon=os.path.abspath(os.path.join(SPECPATH, '..', 'assets', 'icons', 'aloy.ico')),
     version='version_info.txt',
 )
 

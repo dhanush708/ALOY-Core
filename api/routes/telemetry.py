@@ -1,6 +1,43 @@
 from fastapi import APIRouter, Request, Query, HTTPException
 from typing import Optional, List, Dict, Any
 import json
+import sys
+import subprocess
+import time
+from kernel.profiler import profiler
+
+CREATION_FLAGS = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+
+_health_cache = {
+    "git_ok": None,
+    "gpu_detected": None,
+    "vram_mb_total": 0.0,
+    "gpu_name": "Standard GPU",
+    "internet_ok": False,
+    "internet_message": "Checking...",
+    "internet_last_check": 0.0,
+    "internet_checking": False,
+}
+
+async def _check_internet_async():
+    if _health_cache["internet_checking"]:
+        return
+    _health_cache["internet_checking"] = True
+    try:
+        import httpx
+        async with httpx.AsyncClient() as client:
+            res = await client.get("https://github.com", timeout=1.5)
+            if res.status_code == 200:
+                _health_cache["internet_ok"] = True
+                _health_cache["internet_message"] = "Connected (latency verified)"
+            else:
+                _health_cache["internet_message"] = f"Connected with issues (HTTP {res.status_code})"
+    except Exception:
+        _health_cache["internet_ok"] = False
+        _health_cache["internet_message"] = "Offline or DNS resolution failed"
+    finally:
+        _health_cache["internet_last_check"] = time.time()
+        _health_cache["internet_checking"] = False
 
 router = APIRouter(prefix="/api/system", tags=["telemetry"])
 
@@ -133,13 +170,13 @@ async def get_dashboard_stats(request: Request):
             pass
 
         try:
-            import subprocess
             result = subprocess.run(
                 ["nvidia-smi", "--query-gpu=utilization.gpu,memory.used", "--format=csv,noheader,nounits"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                timeout=1
+                timeout=1,
+                creationflags=CREATION_FLAGS
             )
             if result.returncode == 0:
                 parts = result.stdout.strip().split(",")
@@ -197,7 +234,15 @@ async def get_system_health(request: Request):
         from models.ollama_client import OllamaClient
         client = OllamaClient()
         
-    ollama_ok = await client.ping()
+    ollama_start = time.perf_counter()
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=0.5) as ping_client:
+            resp = await ping_client.get(f"{client.base_url}/api/tags")
+            ollama_ok = resp.status_code == 200
+    except Exception:
+        ollama_ok = False
+    profiler.record("Ollama detection", profiler.get_duration(ollama_start))
     
     # 3. Model Checks
     available_models = []
@@ -244,12 +289,20 @@ async def get_system_health(request: Request):
     python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
     python_ok = sys.version_info >= (3, 11)
     
-    git_ok = False
-    try:
-        git_res = subprocess.run(["git", "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=2)
-        git_ok = git_res.returncode == 0
-    except Exception:
-        pass
+    if _health_cache["git_ok"] is None:
+        try:
+            git_res = subprocess.run(
+                ["git", "--version"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=2,
+                creationflags=CREATION_FLAGS
+            )
+            _health_cache["git_ok"] = (git_res.returncode == 0)
+        except Exception:
+            _health_cache["git_ok"] = False
+    git_ok = _health_cache["git_ok"]
         
     # 5. Workspace Write Permission Check
     workspace_ok = False
@@ -279,25 +332,34 @@ async def get_system_health(request: Request):
     disk_message = f"{free_disk_gb} GB free space" if disk_ok else f"{free_disk_gb} GB free space (Warning: Low disk space, 20GB+ recommended)"
     
     # GPU detection
-    gpu_detected = False
-    vram_mb_total = 0.0
-    gpu_name = "Standard GPU"
-    try:
-        gpu_res = subprocess.run(
-            ["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=2
-        )
-        if gpu_res.returncode == 0:
-            gpu_parts = gpu_res.stdout.strip().split(",")
-            if len(gpu_parts) == 2:
-                gpu_name = gpu_parts[0].strip()
-                vram_mb_total = float(gpu_parts[1].strip())
-                gpu_detected = True
-    except Exception:
-        pass
+    gpu_start = time.perf_counter()
+    if _health_cache["gpu_detected"] is None:
+        try:
+            gpu_res = subprocess.run(
+                ["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=2,
+                creationflags=CREATION_FLAGS
+            )
+            if gpu_res.returncode == 0:
+                gpu_parts = gpu_res.stdout.strip().split(",")
+                if len(gpu_parts) == 2:
+                    _health_cache["gpu_name"] = gpu_parts[0].strip()
+                    _health_cache["vram_mb_total"] = float(gpu_parts[1].strip())
+                    _health_cache["gpu_detected"] = True
+                else:
+                    _health_cache["gpu_detected"] = False
+            else:
+                _health_cache["gpu_detected"] = False
+        except Exception:
+            _health_cache["gpu_detected"] = False
+        profiler.record("GPU detection", profiler.get_duration(gpu_start))
+        
+    gpu_detected = _health_cache["gpu_detected"]
+    gpu_name = _health_cache["gpu_name"]
+    vram_mb_total = _health_cache["vram_mb_total"]
         
     gpu_message = f"{gpu_name} ({round(vram_mb_total/1024, 1)} GB VRAM)" if gpu_detected else "No dedicated GPU detected"
     # Warn but don't block if GPU not found or low VRAM
@@ -315,19 +377,13 @@ async def get_system_health(request: Request):
         sqlite_vec_message = f"Check failed: {str(e)}"
 
     # 8. Internet Connection Check
-    import httpx
-    internet_ok = False
-    internet_message = "Offline"
-    try:
-        # Check external connection with a fast 1.5s timeout
-        internet_res = httpx.get("https://github.com", timeout=1.5)
-        if internet_res.status_code == 200:
-            internet_ok = True
-            internet_message = "Connected (latency verified)"
-        else:
-            internet_message = f"Connected with issues (HTTP {internet_res.status_code})"
-    except Exception:
-        internet_message = "Offline or DNS resolution failed"
+    now = time.time()
+    if (now - _health_cache["internet_last_check"] > 30.0) and not _health_cache["internet_checking"]:
+        import asyncio
+        asyncio.create_task(_check_internet_async())
+        
+    internet_ok = _health_cache["internet_ok"]
+    internet_message = _health_cache["internet_message"]
 
     # 9. Unexpected Exit Check (Crash Recovery)
     unexpected_exit = getattr(request.app.state, "unexpected_exit", False)
@@ -368,6 +424,7 @@ async def get_system_health(request: Request):
             "git": {"ok": git_ok}
         }
     }
+    profiler.record("Frontend launch", profiler.get_duration(profiler.start_time))
     return health_status
 
 
@@ -401,7 +458,8 @@ async def get_system_diagnostics(request: Request):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            timeout=1
+            timeout=1,
+            creationflags=CREATION_FLAGS
         )
         if gpu_res.returncode == 0:
             parts = gpu_res.stdout.strip().split(",")

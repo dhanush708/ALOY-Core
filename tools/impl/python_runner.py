@@ -3,7 +3,10 @@ import sys
 import tempfile
 import os
 import logging
+import subprocess
 from typing import Dict, Any
+
+CREATION_FLAGS = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 from tools.base import BaseTool, ToolMetadata
 
 logger = logging.getLogger(__name__)
@@ -58,7 +61,8 @@ class PythonRunnerTool(BaseTool):
                     sys.executable,
                     temp_path,
                     stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                    stderr=asyncio.subprocess.PIPE,
+                    creationflags=CREATION_FLAGS
                 )
                 
                 try:
@@ -76,12 +80,12 @@ class PythonRunnerTool(BaseTool):
                 output = stdout.decode("utf-8", errors="replace")
                 err_output = stderr.decode("utf-8", errors="replace")
             except NotImplementedError:
-                import subprocess
                 def run_sync():
                     p = subprocess.run(
                         [sys.executable, temp_path],
                         stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE
+                        stderr=subprocess.PIPE,
+                        creationflags=CREATION_FLAGS
                     )
                     return p.returncode, p.stdout, p.stderr
                 exit_code, stdout_bytes, stderr_bytes = await asyncio.to_thread(run_sync)

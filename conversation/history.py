@@ -92,10 +92,11 @@ class ConversationStore:
         content: str, 
         name: Optional[str] = None,
         token_count: Optional[int] = None,
-        metadata: Optional[Dict] = None
+        metadata: Optional[Dict] = None,
+        created_at: Optional[datetime] = None
     ) -> ConversationMessage:
         msg_id = str(uuid.uuid4())
-        created_at = datetime.now(timezone.utc)
+        msg_created_at = created_at or datetime.now(timezone.utc)
         
         msg = ConversationMessage(
             id=msg_id,
@@ -105,7 +106,7 @@ class ConversationStore:
             name=name,
             token_count=token_count,
             metadata=metadata or {},
-            created_at=created_at
+            created_at=msg_created_at
         )
         
         with self.db_pool.get_write_connection() as conn:

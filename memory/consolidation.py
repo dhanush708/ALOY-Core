@@ -183,22 +183,25 @@ class ConsolidationEngine:
     # Step 2: Compress then archive low-importance unprotected memories
     # ------------------------------------------------------------------
 
-    async def _compress_archive(self, conn) -> int:
-        cursor = conn.execute(
-            """
-            SELECT id FROM memories
-            WHERE  importance <= ?
-              AND  archived_at IS NULL
-              AND  is_protected = 0
-              AND  tier != 'permanent'
-            """,
-            (self.archival_threshold,),
-        )
-        ids = [row["id"] for row in cursor.fetchall()]
+    async def _compress_archive(self) -> int:
+        with self.db_pool.get_read_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT id FROM memories
+                WHERE  importance <= ?
+                  AND  archived_at IS NULL
+                  AND  is_protected = 0
+                  AND  tier != 'permanent'
+                """,
+                (self.archival_threshold,),
+            )
+            ids = [row["id"] for row in cursor.fetchall()]
+        if not ids:
+            return 0
         count = await self.compressor.compress_batch(ids)
         now = self._now()
-        if ids:
-            placeholders = ",".join("?" * len(ids))
+        placeholders = ",".join("?" * len(ids))
+        with self.db_pool.get_write_connection() as conn:
             conn.execute(
                 f"UPDATE memories SET archived_at = ? WHERE id IN ({placeholders})",
                 [now] + ids,
@@ -243,39 +246,44 @@ class ConsolidationEngine:
             (now, now, drop_id),
         )
 
-    async def _dedup(self, conn) -> int:
+    async def _dedup(self) -> int:
         """Fetch active memory IDs, cluster them, find near-duplicates, merge pairs."""
-        cursor = conn.execute(
-            """
-            SELECT m.id, m.rowid, m.importance, m.confidence, m.last_accessed_at
-            FROM   memories m
-            JOIN   memory_embeddings me ON me.rowid = m.rowid
-            WHERE  m.archived_at IS NULL AND m.is_protected = 0
-            LIMIT  500
-            """
-        )
-        rows = cursor.fetchall()
+        with self.db_pool.get_read_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT m.id, m.rowid, m.importance, m.confidence, m.last_accessed_at
+                FROM   memories m
+                JOIN   memory_embeddings me ON me.rowid = m.rowid
+                WHERE  m.archived_at IS NULL AND m.is_protected = 0
+                LIMIT  500
+                """
+            )
+            rows = cursor.fetchall()
         if len(rows) < 2:
             return 0
 
         ids = [r["id"] for r in rows]
         row_map = {r["id"]: r for r in rows}
 
-        # Find near-duplicate pairs
+        # Find near-duplicate pairs (async, runs outside write transaction)
         pairs = await self.clusterer.find_near_duplicates(ids, similarity_threshold=0.92)
-        merged = 0
+        if not pairs:
+            return 0
 
-        # Use a set to avoid double-merging
+        merged = 0
         dropped: set = set()
+        merges_to_perform = []
+
         for id_a, id_b, sim in pairs:
             if id_a in dropped or id_b in dropped:
                 continue
 
             ra, rb = row_map[id_a], row_map[id_b]
 
-            # Load embeddings
-            emb_a = self._get_embedding(conn, ra["rowid"])
-            emb_b = self._get_embedding(conn, rb["rowid"])
+            # Load embeddings (read-only)
+            with self.db_pool.get_read_connection() as conn:
+                emb_a = self._get_embedding(conn, ra["rowid"])
+                emb_b = self._get_embedding(conn, rb["rowid"])
 
             tag_overlap = self.tag_manager.get_tag_overlap(id_a, id_b)
 
@@ -291,10 +299,16 @@ class ConsolidationEngine:
             if merge_score >= self.dedup_threshold:
                 # Keep the more important memory
                 keep, drop = (id_a, id_b) if ra["importance"] >= rb["importance"] else (id_b, id_a)
-                self._merge_pair(conn, keep, drop)
                 dropped.add(drop)
+                merges_to_perform.append((keep, drop))
                 merged += 1
-                logger.debug(f"consolidation: merged {drop} → {keep} (score={merge_score:.3f})")
+
+        # Perform database updates in a single serialized write transaction
+        if merges_to_perform:
+            with self.db_pool.get_write_connection() as conn:
+                for keep, drop in merges_to_perform:
+                    self._merge_pair(conn, keep, drop)
+                    logger.debug(f"consolidation: merged {drop} -> {keep}")
 
         return merged
 
@@ -342,12 +356,8 @@ class ConsolidationEngine:
             with self.db_pool.get_write_connection() as conn:
                 promoted = self._promote(conn)
 
-            async with _async_context(self.db_pool) as conn:
-                compressed = await self._compress_archive(conn)
-
-            async with _async_context(self.db_pool) as conn:
-                merged = await self._dedup(conn)
-
+            compressed = await self._compress_archive()
+            merged = await self._dedup()
             clusters_found = await self._cluster()
 
         except Exception as e:

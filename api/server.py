@@ -3,12 +3,38 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import sys
 import asyncio
+from kernel.profiler import profiler
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 from contextlib import asynccontextmanager
 import logging
 import os
 from pathlib import Path
+
+# ══════════════════════════════════════════════════════════════════════════════
+# DEPLOYMENT PATH RESOLUTION
+#
+# In a PyInstaller frozen build, CWD is unreliable (set by the OS, not ALOY).
+# All READ paths must resolve from sys._MEIPASS (the bundle extraction dir).
+# All WRITE paths must resolve from %APPDATA%\ALOY\ (guaranteed writable).
+# ══════════════════════════════════════════════════════════════════════════════
+
+FROZEN = getattr(sys, "frozen", False)
+
+# Write paths — always in user's AppData (set by run.py on startup, or compute here)
+_data_dir_env = os.environ.get("ALOY_DATA_DIR")
+_app_data = Path(_data_dir_env) if _data_dir_env else (
+    Path(os.environ.get("APPDATA", Path.home())) / "ALOY" / "data"
+)
+_app_data.mkdir(parents=True, exist_ok=True)
+DB_PATH  = str(_app_data / "aloy.db")
+LOCK_FILE = str(_app_data / "running.tmp")
+
+# Read paths — bundled assets from _MEIPASS when frozen, source tree in dev
+if FROZEN:
+    STATIC_DIR = Path(sys._MEIPASS) / "static"
+else:
+    STATIC_DIR = Path(__file__).parent.parent / "static"
 
 
 from database.connection import DatabaseConnectionPool
@@ -82,21 +108,23 @@ identity_engine = None
 async def lifespan(app: FastAPI):
     global db_pool, memory_manager, conversation_engine, project_manager, agent_runtime, telemetry, doc_intelligence, knowledge_router_engine, evolution_engine, identity_engine
     
+    import time
+    lifespan_start = time.perf_counter()
+
     # 1. Initialize DB
-    db_pool = DatabaseConnectionPool("data/aloy.db")
+    db_init_start = time.perf_counter()
+    db_pool = DatabaseConnectionPool(DB_PATH)
     await db_pool.start()
     app.state.db_pool = db_pool
+    profiler.record("Database init", profiler.get_duration(db_init_start))
     
     # Check for unexpected exit lockfile before overwriting it
     app.state.unexpected_exit = False
     try:
-        import os
-        if os.path.exists("data/running.tmp"):
+        if os.path.exists(LOCK_FILE):
             app.state.unexpected_exit = True
             logger.warning("ALOY detected a previous unexpected exit / crash.")
-        
-        os.makedirs("data", exist_ok=True)
-        with open("data/running.tmp", "w") as f:
+        with open(LOCK_FILE, "w") as f:
             f.write("active")
     except Exception as e:
         logger.warning(f"Lockfile initialization failed: {e}")
@@ -116,12 +144,16 @@ async def lifespan(app: FastAPI):
     await telemetry.start()
     app.state.telemetry = telemetry
     
+    model_router_start = time.perf_counter()
     model_router = ModelRouter(telemetry=telemetry)
+    profiler.record("Model routing init", profiler.get_duration(model_router_start))
     
     # 4. Initialize Memory
+    memory_init_start = time.perf_counter()
     memory_manager = MemoryManager(db_pool, telemetry=telemetry)
     await memory_manager.start()
     app.state.memory_manager = memory_manager
+    profiler.record("Memory init", profiler.get_duration(memory_init_start))
     
     # Initialize Identity Engine
     from identity.engine import IdentityEngine
@@ -243,6 +275,7 @@ async def lifespan(app: FastAPI):
     
     logger.info("ALOY V2 Server with Agent Runtime and Evolution Engine started.")
     
+    profiler.record("FastAPI startup", profiler.get_duration(lifespan_start))
     yield
     
     logger.info("Shutting down ALOY V2 Server...")
@@ -259,13 +292,39 @@ async def lifespan(app: FastAPI):
 
     # Clean up lockfile on clean exit
     try:
-        import os
-        if os.path.exists("data/running.tmp"):
-            os.remove("data/running.tmp")
+        if os.path.exists(LOCK_FILE):
+            os.remove(LOCK_FILE)
     except Exception as e:
         logger.warning(f"Lockfile cleanup failed: {e}")
 
 
+
+def cleanup_lockfile():
+    try:
+        if os.path.exists(LOCK_FILE):
+            os.remove(LOCK_FILE)
+            logger.info("Cleaned up lockfile on shutdown signal.")
+    except Exception as e:
+        logger.warning(f"Failed to clean up lockfile on shutdown signal: {e}")
+
+def register_signal_handlers():
+    import signal
+    def handle_signal(sig, frame):
+        logger.info(f"Received exit signal: {sig}")
+        cleanup_lockfile()
+        sys.exit(0)
+
+    if sys.platform == "win32":
+        try:
+            signal.signal(signal.SIGBREAK, handle_signal)
+        except ValueError:
+            pass
+    try:
+        signal.signal(signal.SIGTERM, handle_signal)
+    except ValueError:
+        pass
+
+register_signal_handlers()
 
 app = FastAPI(title="ALOY V2", lifespan=lifespan)
 
@@ -293,15 +352,17 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"detail": "ALOY encountered an internal system error. Please retry or restart the application."}
     )
 
-# Mount static files
-os.makedirs("static", exist_ok=True)
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# Mount static files from the correct location (bundle dir in production, source tree in dev)
+if not STATIC_DIR.exists():
+    logger.warning(f"Static directory not found at {STATIC_DIR} — UI will not load.")
+    STATIC_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 
 @app.get("/")
 async def serve_index():
-    return FileResponse("static/index.html")
+    return FileResponse(str(STATIC_DIR / "index.html"))
 
 
 @app.get("/health")

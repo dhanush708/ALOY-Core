@@ -18,7 +18,13 @@ async def sse_stream_handler(
     if isinstance(context_or_task, ConversationContext):
         # Traditional synchronous pipeline flow (fallback for tests)
         context = context_or_task
-        yield f"data: {json.dumps({'type': 'meta', 'intent': context.intent, 'model': context.model})}\n\n"
+        search_triggered = getattr(context, "search_triggered", False)
+        search_succeeded = getattr(context, "search_succeeded", False)
+        search_status = "success" if (search_triggered and search_succeeded) else "local"
+        if search_triggered and not search_succeeded:
+            search_status = "failed"
+
+        yield f"data: {json.dumps({'type': 'meta', 'intent': context.intent, 'model': context.model, 'search_status': search_status})}\n\n"
         
         final_text = []
         if context.response_stream:
@@ -30,11 +36,18 @@ async def sse_stream_handler(
                 
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
         
-        # Save assistant's response to history
+        # Save assistant's response to history with full search metadata
         full_response = "".join(final_text)
         if full_response:
             try:
-                await engine.save_assistant_response(conversation_id, full_response)
+                metadata = {"search_status": search_status}
+                # Persist source metadata for follow-up continuity and UI badge display
+                if search_triggered and search_succeeded:
+                    metadata["search_sources"] = getattr(context, "search_sources", [])
+                    metadata["search_confidence"] = getattr(context, "search_confidence", 0.0)
+                    metadata["search_timestamp"] = getattr(context, "search_timestamp", "")
+                    metadata["search_result_count"] = getattr(context, "search_result_count", 0)
+                await engine.save_assistant_response(conversation_id, full_response, metadata)
             except Exception as e:
                 logger.error(f"Failed to save assistant response: {e}")
     else:
@@ -64,10 +77,26 @@ async def sse_stream_handler(
         else:
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
             
-            # Save the assistant response
+            # Save the assistant response with full search metadata
             full_response = "".join(final_text)
             if full_response:
                 try:
-                    await engine.save_assistant_response(conversation_id, full_response)
+                    metadata = {}
+                    context = task.result() if task.done() else None
+                    if context:
+                        search_triggered = getattr(context, "search_triggered", False)
+                        search_succeeded = getattr(context, "search_succeeded", False)
+                        if search_triggered:
+                            status = "success" if search_succeeded else "failed"
+                        else:
+                            status = "local"
+                        metadata["search_status"] = status
+                        # Persist full source metadata for follow-up continuity
+                        if search_triggered and search_succeeded:
+                            metadata["search_sources"] = getattr(context, "search_sources", [])
+                            metadata["search_confidence"] = getattr(context, "search_confidence", 0.0)
+                            metadata["search_timestamp"] = getattr(context, "search_timestamp", "")
+                            metadata["search_result_count"] = getattr(context, "search_result_count", 0)
+                    await engine.save_assistant_response(conversation_id, full_response, metadata)
                 except Exception as e:
                     logger.error(f"Failed to save assistant response: {e}")

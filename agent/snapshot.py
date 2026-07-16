@@ -1,9 +1,12 @@
 import os
+import sys
 import shutil
 import zipfile
 import logging
 import subprocess
 import fnmatch
+
+CREATION_FLAGS = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
@@ -39,6 +42,7 @@ class WorkspaceSnapshotManager:
             capture_output=True,
             text=True,
             check=True,
+            creationflags=CREATION_FLAGS
         )
         return res.stdout.strip()
 

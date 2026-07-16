@@ -1,4 +1,5 @@
 import logging
+import sys
 import yaml
 from pathlib import Path
 
@@ -24,11 +25,19 @@ async def boot() -> ServiceRegistry:
     logger.info("Starting boot sequence...")
     
     # 1. Load configuration
-    config_path = Path("config/default.yaml")
+    # In a frozen PyInstaller app, config/ is in sys._MEIPASS (_internal/).
+    # In dev mode, it is relative to the source tree.
+    if getattr(sys, "frozen", False):
+        config_path = Path(sys._MEIPASS) / "config" / "default.yaml"
+    else:
+        config_path = Path(__file__).parent.parent / "config" / "default.yaml"
+
     config = {}
     if config_path.exists():
         with open(config_path, "r") as f:
             config = yaml.safe_load(f)
+    else:
+        logger.warning(f"Config file not found at {config_path} — using defaults.")
             
     # 2. Create core kernel components
     registry = ServiceRegistry()

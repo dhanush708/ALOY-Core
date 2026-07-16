@@ -1,4 +1,5 @@
 import os
+import sys
 import shutil
 import zipfile
 import logging
@@ -8,6 +9,8 @@ from typing import List, Dict, Any, Optional
 
 from database.connection import DatabaseConnectionPool
 from agent.snapshot import WorkspaceSnapshotManager
+
+CREATION_FLAGS = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +34,7 @@ class AdvancedRollbackEngine:
             capture_output=True,
             text=True,
             check=True,
+            creationflags=CREATION_FLAGS
         )
         return res.stdout.strip()
 

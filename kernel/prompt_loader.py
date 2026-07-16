@@ -139,6 +139,25 @@ class PromptLoader:
         )
 
         self.registry.register(
+            name="reasoning.correct",
+            version="1.0",
+            template=(
+                "You are refining an answer to ensure mathematical and logical consistency.\n"
+                "Original query: '{query}'\n"
+                "Draft Answer:\n{output}\n\n"
+                "The self-verifier identified the following errors:\n"
+                "Logical contradictions: {contradictions}\n"
+                "Missing assumptions: {assumptions}\n"
+                "Incomplete reasoning: {incomplete}\n\n"
+                "Please review the mathematical formulas, calculations, and logical assertions step by step. "
+                "Resolve all contradictions, include missing assumptions, and write a corrected, complete, and internally consistent final answer."
+            ),
+            variables=["query", "output", "contradictions", "assumptions", "incomplete"],
+            model_hint="qwen3:14b",
+            metadata={"description": "Correct logically inconsistent reasoning."}
+        )
+
+        self.registry.register(
             name="reasoning.debate_creator",
             version="1.0",
             template="Given query: '{query}' and context: '{context}', propose a creative and solid solution. Previous critique if any: '{critic_response}'",

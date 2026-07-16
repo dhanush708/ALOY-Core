@@ -1,9 +1,12 @@
 import os
+import sys
 import json
 import logging
 import subprocess
 from datetime import datetime, timezone
 from typing import Optional
+
+CREATION_FLAGS = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
 from .proposal import ImprovementProposal
 
@@ -166,7 +169,7 @@ class ReviewGate:
         # Execute the shell command safely
         try:
             # We run the command via subprocess
-            res = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=60)
+            res = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=60, creationflags=CREATION_FLAGS)
             if res.returncode != 0:
                 logger.error(f"Installation command failed: {res.stderr}")
                 return False
