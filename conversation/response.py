@@ -15,34 +15,11 @@ class ResponseGenerationStage(PipelineStage):
         """Sets up the streaming generator in the context or consumes it asynchronously into the queue."""
         router = self.model_router
 
-        # Check for search failure and validate confidence
+        # Search state is now advisory only (v1.0.2) — the model always runs.
+        # When search failed, the search_context in the user message already
+        # tells the model what happened via the system prompt rules.
         search_triggered = getattr(context, "search_triggered", False)
         search_succeeded = getattr(context, "search_succeeded", False)
-
-        if search_triggered and not search_succeeded:
-            fail_msg = "I couldn't verify this information from reliable sources."
-            context.final_response = fail_msg
-            if context.event_queue is not None:
-                context.event_queue.put_nowait({
-                    "type": "meta",
-                    "intent": context.intent or "simple_chat",
-                    "model": context.model or "local",
-                    "search_status": "failed"
-                })
-                # Stream it token by token for smooth UI experience
-                words = fail_msg.split(" ")
-                for i, word in enumerate(words):
-                    space = " " if i > 0 else ""
-                    context.event_queue.put_nowait({
-                        "type": "token",
-                        "content": space + word
-                    })
-                    await asyncio.sleep(0.01)
-            else:
-                async def failed_stream() -> AsyncGenerator[str, None]:
-                    yield fail_msg
-                context.response_stream = failed_stream()
-            return context
 
         if context.event_queue is not None:
             # Real-time asynchronous stream execution
@@ -50,22 +27,43 @@ class ResponseGenerationStage(PipelineStage):
             reasoning_active = False
             in_think_block = False
             
+            # Create ONE filter instance per response (not per token!)
+            # The sliding-window state must persist across all tokens.
+            from identity.integrity import PromptIntegrityFilter
+            integrity_filter = PromptIntegrityFilter()
+
             try:
                 # We yield the meta event if not already done
-                # (although it is done in Intent Detection, we make sure it exists)
-                search_status = "success" if (search_triggered and search_succeeded) else "local"
+                if search_triggered and search_succeeded:
+                    search_status = "success"
+                elif search_triggered:
+                    search_status = "failed"
+                else:
+                    search_status = "local"
                 context.event_queue.put_nowait({
                     "type": "meta",
                     "intent": context.intent or "simple_chat",
                     "model": context.model or "qwen3:14b",
                     "search_status": search_status
                 })
+
+                # Use the chat API (messages format) when structured messages are available.
+                # Fall back to raw prompt if messages list is empty (e.g., in tests).
+                use_chat_api = bool(context.messages)
+                if use_chat_api:
+                    token_stream = router.stream_chat(
+                        task=context.intent or "simple_chat",
+                        messages=context.messages,
+                        conversation_id=context.state.id,
+                    )
+                else:
+                    token_stream = router.stream(
+                        task=context.intent or "simple_chat",
+                        prompt=context.full_prompt,
+                        conversation_id=context.state.id,
+                    )
                 
-                async for token in router.stream(
-                    task=context.intent or "simple_chat",
-                    prompt=context.full_prompt,
-                    conversation_id=context.state.id,
-                ):
+                async for token in token_stream:
                     full_response.append(token)
                     
                     # Accumulate a check window
@@ -103,14 +101,13 @@ class ResponseGenerationStage(PipelineStage):
                         # Strip any trailing or raw tags that might leak
                         clean_token = token.replace("</think>", "").replace("<think>", "")
                         if clean_token:
-                            from identity.integrity import PromptIntegrityFilter
-                            # Apply the prompt integrity filter on the clean token
-                            filter_obj = PromptIntegrityFilter()
-                            clean_token = filter_obj.clean_text(clean_token)
-                            context.event_queue.put_nowait({
-                                "type": "token",
-                                "content": clean_token
-                            })
+                            # Apply the shared integrity filter instance (stateful across tokens)
+                            clean_token = integrity_filter.process_chunk(clean_token)
+                            if clean_token:
+                                context.event_queue.put_nowait({
+                                    "type": "token",
+                                    "content": clean_token
+                                })
                             
             except Exception as e:
                 logger.error("Response generation failed in async stream: %s", e, exc_info=True)
@@ -124,6 +121,15 @@ class ResponseGenerationStage(PipelineStage):
                 context.event_queue.put_nowait({
                     "type": "reasoning_finished"
                 })
+                
+            # Flush any remaining safe text held back by the filter
+            final_token = integrity_filter.flush()
+            if final_token:
+                context.event_queue.put_nowait({
+                    "type": "token",
+                    "content": final_token
+                })
+                full_response.append(final_token)
                 
             context.final_response = "".join(full_response)
         else:

@@ -111,6 +111,36 @@ class SearchPipeline:
         self.cache = ResearchCache(db_pool, ttl_seconds=cache_ttl)
         self.cache_ttl = cache_ttl
 
+        # ── v1.0.2 Circuit Breaker ────────────────────────────────────────
+        self._failure_count = 0
+        self._last_failure_time = 0.0
+        self._circuit_open_until = 0.0
+        self._max_failures = 3
+        self._cooldown_seconds = 120
+
+    # ── Circuit Breaker Helpers (v1.0.2) ────────────────────────────────
+    def _circuit_open(self) -> bool:
+        """Return True if the circuit breaker is active (search temporarily disabled)."""
+        return time.time() < self._circuit_open_until
+
+    def _record_search_success(self) -> None:
+        """Reset the circuit breaker on a successful search result."""
+        self._failure_count = 0
+        self._circuit_open_until = 0.0
+
+    def _record_search_failure(self) -> None:
+        """Increment failure counter; open the circuit if threshold exceeded."""
+        now = time.time()
+        self._failure_count += 1
+        self._last_failure_time = now
+        if self._failure_count >= self._max_failures:
+            self._circuit_open_until = now + self._cooldown_seconds
+            logger.warning(
+                "Search circuit breaker OPEN (%d consecutive failures) — "
+                "search disabled for %ds",
+                self._failure_count, self._cooldown_seconds
+            )
+
     # ==========================================================================
     # Phase 2: Semantic Search Decision
     # ==========================================================================
@@ -136,15 +166,20 @@ class SearchPipeline:
             )
             try:
                 # Fast route via classification mapping
-                resp = await _call_generate(
-                    self.model_router,
-                    task="classification",
-                    prompt=prompt,
-                    options={"temperature": 0.0, "max_tokens": 5}
+                resp = await asyncio.wait_for(
+                    _call_generate(
+                        self.model_router,
+                        task="classification",
+                        prompt=prompt,
+                        options={"temperature": 0.0, "max_tokens": 5}
+                    ),
+                    timeout=5
                 )
                 clean_resp = resp.strip().upper()
                 if "YES" in clean_resp:
                     return True
+            except asyncio.TimeoutError:
+                logger.warning("Semantic search decision timed out after 5s")
             except Exception as e:
                 logger.error(f"Semantic search decision failed: {e}")
 
@@ -166,11 +201,14 @@ class SearchPipeline:
             "Do not include numbers, bullets, introduction, or explanation."
         )
         try:
-            resp = await _call_generate(
-                self.model_router,
-                task="meta_request",
-                prompt=prompt,
-                options={"temperature": 0.3}
+            resp = await asyncio.wait_for(
+                _call_generate(
+                    self.model_router,
+                    task="meta_request",
+                    prompt=prompt,
+                    options={"temperature": 0.3}
+                ),
+                timeout=5
             )
             lines = [line.strip().strip("-").strip("*").strip() for line in resp.split("\n") if line.strip()]
             valid_queries = [l for l in lines if len(l) > 3 and not l.startswith("Here is")]
@@ -178,6 +216,8 @@ class SearchPipeline:
                 # Limit to max 3 unique queries including the original
                 unique_queries = list(dict.fromkeys(valid_queries + [query]))
                 return unique_queries[:3]
+        except asyncio.TimeoutError:
+            logger.warning("Query generation timed out after 5s")
         except Exception as e:
             logger.error(f"Query generation failed: {e}")
         
@@ -187,12 +227,22 @@ class SearchPipeline:
     # Phase 4: Concurrent Multi Search
     # ==========================================================================
     async def _execute_single_query(self, query: str) -> List[Dict[str, Any]]:
-        """Executes a single search query and parses DuckDuckGo HTML results."""
+        """Executes a single search query and parses DuckDuckGo HTML results.
+
+        Wraps the external network call in a 10-second timeout so a stalled
+        DNS lookup or slow HTTP response never blocks the entire pipeline.
+        """
         try:
-            raw = await self.search_tool.execute({"query": query}, {})
+            raw = await asyncio.wait_for(
+                self.search_tool.execute({"query": query}, {}),
+                timeout=10
+            )
             if not raw or raw.startswith("No results") or raw.startswith("Failed"):
                 return []
             return self._parse_ddg_results(raw)
+        except asyncio.TimeoutError:
+            logger.warning("Search network call timed out after 10s for query '%s'", query)
+            return []
         except Exception as e:
             logger.error(f"Search query '{query}' failed: {e}")
             return []
@@ -301,11 +351,19 @@ class SearchPipeline:
             # Bound score between 0 and 100
             total_score = max(0.0, min(100.0, total_score))
 
+            # 4. Confidence Rating (Phase 4)
+            confidence_rating = "Low"
+            if total_score >= 85.0:
+                confidence_rating = "High"
+            elif total_score >= 60.0:
+                confidence_rating = "Medium"
+
             scored.append({
                 "title": src.get("title", ""),
                 "url": url,
                 "snippet": src.get("snippet", ""),
                 "score": total_score,
+                "confidence_rating": confidence_rating,
                 "authority": authority,
                 "freshness": freshness,
                 "relevance": relevance,
@@ -317,15 +375,119 @@ class SearchPipeline:
         return scored
 
     # ==========================================================================
+    # Phase 2: Evidence Extraction
+    # ==========================================================================
+    async def build_structured_evidence(self, query: str, ranked_sources: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Extracts structured facts, entities, and dates from the search snippets before generation."""
+        if not ranked_sources:
+            return []
+
+        usable_sources = [s for s in ranked_sources if s["score"] >= 40.0][:5]
+        if not usable_sources:
+            return []
+
+        # P6: Skip expensive LLM extraction if there is exactly 1 source and it's weak
+        if not _is_generate_awaitable(self.model_router) or (len(usable_sources) == 1 and usable_sources[0]["score"] < 65.0):
+            # Fast return / fallback
+            for s in usable_sources:
+                s["key_facts"] = [s.get("snippet", "")]
+                s["entities"] = []
+                s["dates"] = []
+            return usable_sources
+
+        # Call LLM to extract JSON for each source
+        # To optimize latency, we do this in a single prompt for all top sources
+        context_lines = []
+        for idx, s in enumerate(usable_sources):
+            context_lines.append(f"Source ID: {idx}\nTitle: {s['title']}\nSnippet: {s['snippet']}")
+        context_str = "\n\n".join(context_lines)
+
+        prompt = (
+            "You are an Evidence Extraction Engine.\n"
+            f"Query: \"{query}\"\n"
+            "Analyze the following sources and extract structured evidence (facts, entities, dates).\n"
+            "Return a JSON array of objects. Each object must have:\n"
+            "- \"source_id\": The integer ID of the source.\n"
+            "- \"key_facts\": A list of factual string statements extracted from the snippet.\n"
+            "- \"entities\": A list of named entities (people, companies, products).\n"
+            "- \"dates\": A list of dates mentioned.\n"
+            "Do NOT output markdown code blocks. Output ONLY valid JSON.\n\n"
+            f"Sources:\n{context_str}"
+        )
+
+        try:
+            resp = await asyncio.wait_for(
+                _call_generate(
+                    self.model_router,
+                    task="meta_request",
+                    prompt=prompt,
+                    options={"temperature": 0.0}
+                ),
+                timeout=10
+            )
+            import json
+            clean_json = resp.strip()
+            if clean_json.startswith("```json"):
+                clean_json = clean_json[7:]
+            if clean_json.endswith("```"):
+                clean_json = clean_json[:-3]
+            clean_json = clean_json.strip()
+
+            extracted = json.loads(clean_json)
+            if isinstance(extracted, list):
+                for item in extracted:
+                    sid = item.get("source_id")
+                    if isinstance(sid, int) and 0 <= sid < len(usable_sources):
+                        usable_sources[sid]["key_facts"] = item.get("key_facts", [])
+                        usable_sources[sid]["entities"] = item.get("entities", [])
+                        usable_sources[sid]["dates"] = item.get("dates", [])
+        except asyncio.TimeoutError:
+            logger.warning("Evidence extraction timed out after 10s — using raw snippets as fallback")
+            # Fallback
+            for s in usable_sources:
+                if "key_facts" not in s:
+                    s["key_facts"] = [s.get("snippet", "")]
+                    s["entities"] = []
+                    s["dates"] = []
+        except Exception as e:
+            logger.error(f"Evidence Extraction failed: {e}")
+            # Fallback
+            for s in usable_sources:
+                if "key_facts" not in s:
+                    s["key_facts"] = [s.get("snippet", "")]
+                    s["entities"] = []
+                    s["dates"] = []
+
+        return usable_sources
+
+    # ==========================================================================
     # Phase 6: Retry Strategy
     # ==========================================================================
     async def execute_with_retry(self, query: str) -> List[Dict[str, Any]]:
         """Runs search with query optimization, parallel execution, and a fallback retry loop."""
+        
+        # Phase 7: Performance / Caching
+        # ── v1.0.2 Circuit Breaker ────────────────────────────────────────
+        if self._circuit_open():
+            logger.warning(
+                "SearchPipeline: circuit breaker OPEN — skipping search for '%s'",
+                query
+            )
+            return []
+
+        # Phase 7: Performance / Caching
+        cached_result = self.cache.get(query)
+        if cached_result is not None:
+            logger.info(f"SearchPipeline: Cache hit for query '{query}'")
+            return cached_result.get("sources", [])
+
         queries = await self.generate_queries(query)
         logger.info(f"SearchPipeline: dispathing parallel queries: {queries}")
         
         sources = await self.execute_multi_search(queries)
         if sources:
+            self._record_search_success()
+            self.cache.set(query, {"sources": sources})
             return sources
 
         # Retry 1: Broaden query by removing adjectives and auxiliary words
@@ -334,6 +496,8 @@ class SearchPipeline:
             logger.info(f"SearchPipeline: Retry 1 - Broadened Query: '{broad_query}'")
             sources = await self._execute_single_query(broad_query)
             if sources:
+                self._record_search_success()
+                self.cache.set(query, {"sources": sources})
                 return sources
 
         # Retry 2: Simple LLM-based query broadening
@@ -345,20 +509,28 @@ class SearchPipeline:
                 "Output ONLY the search query, nothing else."
             )
             try:
-                broad_llm = await _call_generate(
-                    self.model_router,
-                    task="meta_request",
-                    prompt=prompt,
-                    options={"temperature": 0.1}
+                broad_llm = await asyncio.wait_for(
+                    _call_generate(
+                        self.model_router,
+                        task="meta_request",
+                        prompt=prompt,
+                        options={"temperature": 0.1}
+                    ),
+                    timeout=5
                 )
                 broad_llm = broad_llm.strip().strip('"')
                 if len(broad_llm) > 2:
                     sources = await self._execute_single_query(broad_llm)
                     if sources:
+                        self._record_search_success()
+                        self.cache.set(query, {"sources": sources})
                         return sources
+            except asyncio.TimeoutError:
+                logger.warning("LLM retry broadening timed out after 5s")
             except Exception as e:
                 logger.error(f"LLM retry broadening failed: {e}")
 
+        self._record_search_failure()
         return []
 
     def _broaden_query_heuristic(self, query: str) -> str:
@@ -394,14 +566,19 @@ class SearchPipeline:
                 "Respond with exactly 'YES' or 'NO' and nothing else."
             )
             try:
-                resp = await _call_generate(
-                    self.model_router,
-                    task="classification",
-                    prompt=prompt,
-                    options={"temperature": 0.0, "max_tokens": 5}
+                resp = await asyncio.wait_for(
+                    _call_generate(
+                        self.model_router,
+                        task="classification",
+                        prompt=prompt,
+                        options={"temperature": 0.0, "max_tokens": 5}
+                    ),
+                    timeout=5
                 )
                 if "YES" in resp.strip().upper():
                     return True
+            except asyncio.TimeoutError:
+                logger.warning("Semantic topic drift check timed out after 5s")
             except Exception as e:
                 logger.error(f"Semantic topic drift classification failed: {e}")
         else:
@@ -416,19 +593,19 @@ class SearchPipeline:
     # Phase 10 & 11: Synthesis & Hallucination Protection
     # ==========================================================================
     async def synthesize_answer(self, query: str, ranked_sources: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Synthesizes a response from ranked sources. Enforces strict hallucination rules."""
+        """Synthesizes a response from structured evidence. Enforces strict hallucination rules."""
         if not ranked_sources:
             return {
-                "answer": "I couldn't verify this information from reliable sources.",
+                "answer": "I could not find enough reliable evidence.",
                 "confidence": 0.0,
                 "sources": []
             }
 
-        # Filter out low quality sources (score < 40)
-        usable_sources = [s for s in ranked_sources if s["score"] >= 40.0]
-        if not usable_sources:
+        # Extract structured evidence (Phase 2)
+        evidence_sources = await self.build_structured_evidence(query, ranked_sources)
+        if not evidence_sources:
             return {
-                "answer": "I couldn't verify this information from reliable sources.",
+                "answer": "I could not find enough reliable evidence.",
                 "confidence": 0.0,
                 "sources": []
             }
@@ -436,46 +613,56 @@ class SearchPipeline:
         if not _is_generate_awaitable(self.model_router):
             # Fallback simple concatenation for tests where model_router is a blank mock
             return {
-                "answer": f"Verified Answer from sources: {', '.join(s['title'] for s in usable_sources)}",
+                "answer": f"Verified Answer from sources: {', '.join(s['title'] for s in evidence_sources)}",
                 "confidence": 0.90,
-                "sources": usable_sources[:5]
+                "sources": evidence_sources[:5]
             }
 
-        # Format context for synthesis
+        # Format structured context for synthesis
         context_lines = []
-        for idx, s in enumerate(usable_sources[:5], 1):
-            context_lines.append(f"Source [{idx}]: {s['title']} ({s['url']})\nSnippet: {s['snippet']}")
+        for idx, s in enumerate(evidence_sources, 1):
+            facts_str = " ".join(s.get("key_facts", [s.get("snippet", "")]))
+            dates_str = ", ".join(s.get("dates", []))
+            conf = s.get("confidence_rating", "Medium")
+            context_lines.append(
+                f"Source [{idx}]: {s['title']} ({s['url']}) | Confidence: {conf}\n"
+                f"Extracted Facts: {facts_str}\nDates: {dates_str}"
+            )
         context_str = "\n\n".join(context_lines)
 
         prompt = f"""You are ALOY's Research Synthesizer. 
-Synthesize a concise, verified answer to the query using ONLY the verified facts in the search sources below.
+Synthesize a concise, verified answer to the query using ONLY the structured evidence in the sources below.
 
 ABSOLUTE RULES:
 1. Answer the query ONLY using the facts present in the sources. Do NOT use external pre-trained knowledge or fabricate any details.
-2. If the sources do not contain sufficient evidence to answer the query, output exactly: "I couldn't verify this information from reliable sources."
-3. Cite sources inline using markdown bracket links, e.g. "According to [TechCrunch](URL)..." or "...([Wired](URL))".
-4. Do NOT mention "training cutoff", "knowledge cutoff", or "LLM limitations" under any circumstances.
-5. Provide a clickable list of sources at the end under a "### Sources" section.
+2. If the query asks to compare an external entity to ALOY/you, summarize the facts about the external entity from the sources. 
+3. If the sources do not contain sufficient evidence to thoroughly answer the query, you MUST output EXACTLY: "I could not find enough reliable evidence." Do NOT invent facts, dates, versions, winners, or rankings.
+4. Cite sources inline using markdown bracket links, e.g. "According to [TechCrunch](URL)..." or "...([Wired](URL))".
+5. Do NOT mention "training cutoff", "knowledge cutoff", or "LLM limitations" under any circumstances.
+6. Provide a clickable list of sources at the end under a "### Sources" section.
 
 Query: {query}
 
-Verified Sources:
+Verified Evidence:
 {context_str}
 
 Format the response cleanly.
 """
         try:
-            answer = await _call_generate(
-                self.model_router,
-                task="complex_chat",
-                prompt=prompt,
-                options={"temperature": 0.2}
+            answer = await asyncio.wait_for(
+                _call_generate(
+                    self.model_router,
+                    task="complex_chat",
+                    prompt=prompt,
+                    options={"temperature": 0.1}
+                ),
+                timeout=15
             )
             
-            # Calculate overall confidence initially
-            confidence = sum(s["score"] for s in usable_sources[:3]) / min(3, len(usable_sources)) / 100.0
+            # Calculate overall numerical confidence for internal logic
+            confidence = sum(s["score"] for s in evidence_sources[:3]) / min(3, len(evidence_sources)) / 100.0
             
-            # Support JSON-structured responses from legacy mock/LLM source verifiers (e.g. test_confidence_scoring_under_conflicting_sources)
+            # Support JSON-structured responses from legacy mock/LLM source verifiers
             import json
             try:
                 parsed = json.loads(answer)
@@ -486,20 +673,28 @@ Format the response cleanly.
             except Exception:
                 pass
 
-            # Integrity double check: if output contains cutoff phrasing, overwrite
+            # Strict fallback mapping (Phase 3 & 6)
             answer_lower = answer.lower()
-            if "cutoff" in answer_lower or "fabricate" in answer_lower:
-                answer = "I couldn't verify this information from reliable sources."
+            if "cutoff" in answer_lower or "fabricate" in answer_lower or "i couldn't verify" in answer_lower or "i cannot verify" in answer_lower:
+                answer = "I could not find enough reliable evidence."
 
             return {
                 "answer": answer.strip(),
                 "confidence": confidence,
-                "sources": usable_sources[:5]
+                "sources": evidence_sources
+            }
+        except asyncio.TimeoutError:
+            logger.warning("Search synthesis timed out after 15s")
+            return {
+                "answer": "I could not find enough reliable evidence.",
+                "confidence": 0.0,
+                "sources": []
             }
         except Exception as e:
             logger.error(f"Synthesis failed: {e}")
             return {
-                "answer": "I couldn't verify this information from reliable sources.",
+                "answer": "I could not find enough reliable evidence.",
                 "confidence": 0.0,
                 "sources": []
             }
+

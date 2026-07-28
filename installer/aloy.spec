@@ -3,6 +3,7 @@
 # Run: pyinstaller --noconfirm installer/aloy.spec
 
 import os
+from PyInstaller.utils.hooks import copy_metadata
 
 block_cipher = None
 
@@ -27,6 +28,8 @@ added_files = [
     # sqlite-vec DLL extension
     (os.path.join(sqlite_vec_dir, 'vec0.dll'), 'sqlite_vec'),
 ]
+added_files += copy_metadata('email-validator')
+added_files += copy_metadata('pydantic')
 
 hidden_imports = [
     # FastAPI & ASGI
@@ -35,7 +38,7 @@ hidden_imports = [
     'uvicorn.protocols.websockets.websockets_impl',
     'starlette', 'starlette.middleware', 'starlette.staticfiles',
     # Pydantic
-    'pydantic', 'pydantic_settings',
+    'pydantic', 'pydantic_settings', 'email_validator',
     # Async
     'asyncio', 'aiofiles', 'aiohttp', 'websockets',
     # Data
@@ -72,7 +75,7 @@ a = Analysis(
     binaries=[],
     datas=added_files,
     hiddenimports=hidden_imports,
-    hookspath=[],
+    hookspath=['installer/hooks'],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[

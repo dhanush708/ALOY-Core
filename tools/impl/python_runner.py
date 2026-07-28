@@ -55,6 +55,14 @@ class PythonRunnerTool(BaseTool):
             f.write(code)
             temp_path = f.name
             
+        is_frozen = getattr(sys, "frozen", False)
+        out_temp_path = None
+        env = os.environ.copy()
+        if is_frozen:
+            with tempfile.NamedTemporaryFile(suffix=".log", delete=False) as f2:
+                out_temp_path = f2.name
+            env["ALOY_STDOUT_FILE"] = out_temp_path
+            
         try:
             try:
                 process = await asyncio.create_subprocess_exec(
@@ -62,6 +70,7 @@ class PythonRunnerTool(BaseTool):
                     temp_path,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
+                    env=env,
                     creationflags=CREATION_FLAGS
                 )
                 
@@ -77,20 +86,31 @@ class PythonRunnerTool(BaseTool):
                     raise
                     
                 exit_code = process.returncode
-                output = stdout.decode("utf-8", errors="replace")
-                err_output = stderr.decode("utf-8", errors="replace")
+                if is_frozen:
+                    with open(out_temp_path, "r", encoding="utf-8") as f:
+                        output = f.read()
+                    err_output = ""
+                else:
+                    output = stdout.decode("utf-8", errors="replace")
+                    err_output = stderr.decode("utf-8", errors="replace")
             except NotImplementedError:
                 def run_sync():
                     p = subprocess.run(
                         [sys.executable, temp_path],
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
+                        env=env,
                         creationflags=CREATION_FLAGS
                     )
                     return p.returncode, p.stdout, p.stderr
                 exit_code, stdout_bytes, stderr_bytes = await asyncio.to_thread(run_sync)
-                output = stdout_bytes.decode("utf-8", errors="replace")
-                err_output = stderr_bytes.decode("utf-8", errors="replace")
+                if is_frozen:
+                    with open(out_temp_path, "r", encoding="utf-8") as f:
+                        output = f.read()
+                    err_output = ""
+                else:
+                    output = stdout_bytes.decode("utf-8", errors="replace")
+                    err_output = stderr_bytes.decode("utf-8", errors="replace")
             
             result = []
             if output:
@@ -105,5 +125,7 @@ class PythonRunnerTool(BaseTool):
             # Clean up temp file
             try:
                 os.remove(temp_path)
+                if out_temp_path and os.path.exists(out_temp_path):
+                    os.remove(out_temp_path)
             except Exception as e:
-                logger.warning(f"Failed to remove temp file {temp_path}: {e}")
+                logger.warning(f"Failed to remove temp file: {e}")

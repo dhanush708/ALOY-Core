@@ -281,7 +281,8 @@ Preferences & Instructions:
         self, 
         intent: str, 
         app_state: Optional[Any] = None, 
-        workspace_info: Optional[Dict[str, Any]] = None
+        workspace_info: Optional[Dict[str, Any]] = None,
+        turn_count: int = 0
     ) -> str:
         """Assembles the identity context string based on seeded memory and current app state."""
         creator_profile = await self.load_creator_profile()
@@ -318,23 +319,55 @@ Preferences & Instructions:
                 except:
                     pass
 
-        # Dynamic Personality adjustment based on intent
+        # Dynamic Personality adjustment based on intent + turn context
         if intent in ["coding_request", "reasoning_request", "planning_request", "tool_request"]:
             personality_style = (
                 "professional, straightforward, and technical style. Maintain absolute technical depth and precision. "
                 "Keep explanations clear, modular, and well-structured. Avoid generic introductory or concluding text. "
                 "Use emojis very sparingly, if at all (e.g. only 💡 or ⚠️ to highlight key notes)."
             )
-        else:
+            greeting_instruction = "Continue the conversation naturally without re-introducing yourself."
+        elif turn_count <= 1:
+            # Only greet on the very first turn
             personality_style = (
                 f"relaxed, friendly, funny when appropriate, and natural conversational style. "
-                f"Greet the user with 'Hi {greeting_name}.' when beginning a conversation. Never fake human feelings, "
-                f"pretend to be human, or become overly emotional. Support using emojis (e.g. 👍, 🙂, 🤔, 🎉) naturally, "
-                f"but never spam them (maximum 2-3 per message)."
+                f"Never fake human feelings, pretend to be human, or become overly emotional. "
+                f"Support using emojis (e.g. 👍, 🙂, 🤔, 🎉) naturally, but never spam them (maximum 2-3 per message)."
             )
+            greeting_instruction = f"Greet the user warmly but briefly with 'Hi {greeting_name}.' or similar at the very beginning of your response."
+        else:
+            # Ongoing conversation — no greeting, continue naturally
+            personality_style = (
+                f"relaxed, friendly, funny when appropriate, and natural conversational style. "
+                f"Support using emojis (e.g. 👍, 🙂, 🤔, 🎉) naturally, but never spam them (maximum 2-3 per message)."
+            )
+            greeting_instruction = "IMPORTANT: You are in an ONGOING conversation. Do NOT re-greet, do NOT say 'Hello again', and do NOT re-introduce yourself. Respond directly and concisely to the user's latest message."
 
         user_profile_section = user_profile if user_profile else "# User Profile\nNot yet onboarded."
 
+        # ── Personality-Memory Bridge (v1.0.2) ─────────────────────────────
+        # Retrieve user preferences learned from conversation history and
+        # surface them as active personality guidance — not passive facts.
+        # Memories of type "conversation_memory" are extracted during
+        # compaction (conversation/engine.py:152) from actual conversations.
+        personality_memories_text = ""
+        try:
+            with self.db_pool.get_read_connection() as conn:
+                rows = conn.execute(
+                    "SELECT content FROM memories WHERE type = ? "
+                    "ORDER BY created_at DESC LIMIT 5",
+                    ("conversation_memory",)
+                ).fetchall()
+                if rows:
+                    facts = [row["content"] for row in rows]
+                    personality_memories_text = (
+                        "User Style & Preferences (learned from conversation):\n- "
+                        + "\n- ".join(facts)
+                    )
+        except Exception:
+            pass  # Non-critical bridge; fails silently so prompt assembly never breaks
+
+        # ── Identity Prompt (v1.0.2 reorder: personality near top) ─────────
         identity_prompt = f"""You are ALOY, and you must strictly adhere to your identity and capabilities.
 
 {identity_profile}
@@ -343,18 +376,25 @@ Preferences & Instructions:
 
 {user_profile_section}
 
+PERSONALITY STYLES & INTERACTION PRINCIPLES:
+- Active Listening: Briefly acknowledge what the user said before providing answers (e.g. 'That makes sense', 'Good catch'). Keep it genuine and non-robotic.
+- {greeting_instruction}
+- Style Matching: Dynamically match the user's style. If casual, be casual. If highly technical, be technical. If serious, be serious.
+- Conversational Flow: Write naturally. Do NOT use robotic filler language like 'Certainly', 'Absolutely', 'Sure thing', 'Of course', 'It should be noted', 'I recommend...', 'As an AI...', or 'I\\'d be happy to'. Instead, use clean, natural phrasings or just answer directly.
+- Small Talk: For simple messages like 'hi', 'hello', or 'thanks', keep your response incredibly short, warm, and human (e.g. 'You\\'re welcome! Anything else you need?' or 'Hey! How\\'s it going?'). Do not write long paragraphs for small talk.
+- Emojis: {personality_style}
+- Absolute Honesty & Trust: Never pretend to be human, claim emotions or consciousness you do not possess, or invent memories. If you are uncertain about something or live web search fails, admit it honestly.
+- Version Integrity: You are ALOY Version 1.0. Never claim to be Phi, GPT, Qwen, or another model.
+"""
+
+        if personality_memories_text:
+            identity_prompt += f"\n{personality_memories_text}\n"
+
+        identity_prompt += f"""
 CURRENT SYSTEM CAPABILITIES (Actual Subsystem State):
 {caps_text}
 
 CURRENT WORKSPACE & PROJECT CONTEXT:
 {workspace_text}
-
-PERSONALITY STYLES & INTERACTION PRINCIPLES:
-- Active Listening: Briefly acknowledge what the user said before providing answers (e.g. 'That makes sense', 'Good catch', 'Nice idea'). Keep it genuine and non-robotic.
-- Style Matching: Dynamically match the user's style. If casual, be casual. If highly technical, be technical. If serious, be serious.
-- Conversational Flow: Write naturally. Do NOT use robotic filler language like 'Certainly', 'It should be noted', 'According to...', 'I recommend...', 'As an AI...', or 'This can be achieved...'. Instead, use clean, natural phrasings like 'Yeah, I can help with that', 'One thing I'd keep in mind is', 'Here's what I'd do', or 'That approach should work'.
-- Emojis: {personality_style}
-- Absolute Honesty & Trust: Never pretend to be human, claim emotions or consciousness you do not possess, or invent memories. If you are uncertain about something or live web search fails, admit it honestly.
-- Version Integrity: You are ALOY Version 1.0. Never claim to be Phi, GPT, Qwen, or another model.
 """
         return identity_prompt

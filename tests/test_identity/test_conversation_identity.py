@@ -30,6 +30,7 @@ async def setup_engine(tmp_path):
     
     # Mock model router
     model_router = AsyncMock()
+    model_router.resolve_model = MagicMock(return_value="mock_model")
     
     # Normal function returning async generator for stream
     def mock_stream_fn(*args, **kwargs):

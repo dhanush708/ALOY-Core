@@ -64,13 +64,13 @@ class ContextIntelligenceEngine:
         self._cache_keys_lru = []
         self._max_cache_size = 50
         
-        # Profile definitions
+        # Profile definitions — history budgets increased for v1.0.2 continuity fix
         self.profiles = {
             'simple_chat': {
                 'system': 300,
                 'identity': 600,
-                'memories': 500,
-                'history': 1000,
+                'memories': 1000,
+                'history': 2000,
                 'tools': 0,
                 'project': 0,
                 'reserve': 2000
@@ -78,8 +78,8 @@ class ContextIntelligenceEngine:
             'complex_chat': {
                 'system': 300,
                 'identity': 600,
-                'memories': 1500,
-                'history': 2000,
+                'memories': 2000,
+                'history': 3000,
                 'tools': 0,
                 'project': 0,
                 'reserve': 4000
@@ -88,7 +88,7 @@ class ContextIntelligenceEngine:
                 'system': 300,
                 'identity': 600,
                 'memories': 500,
-                'history': 500,
+                'history': 1500,
                 'tools': 500,
                 'project': 2000,
                 'reserve': 4000
@@ -97,7 +97,7 @@ class ContextIntelligenceEngine:
                 'system': 300,
                 'identity': 600,
                 'memories': 3000,
-                'history': 500,
+                'history': 1500,
                 'tools': 0,
                 'project': 0,
                 'reserve': 2000
@@ -106,7 +106,7 @@ class ContextIntelligenceEngine:
                 'system': 300,
                 'identity': 600,
                 'memories': 200,
-                'history': 500,
+                'history': 1500,
                 'tools': 1500,
                 'project': 500,
                 'reserve': 2000
@@ -115,7 +115,7 @@ class ContextIntelligenceEngine:
                 'system': 300,
                 'identity': 600,
                 'memories': 1000,
-                'history': 1000,
+                'history': 2000,
                 'tools': 0,
                 'project': 0,
                 'reserve': 6000

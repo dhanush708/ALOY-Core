@@ -9,7 +9,7 @@
 ;   3. Run: ISCC.exe installer/aloy.iss
 
 #define AppName "ALOY"
-#define AppVersion "1.0.0"
+#define AppVersion "1.0.1"
 #define AppPublisher "Dhanush A."
 #define AppURL "https://github.com/dhanush708/aloy"
 #define AppExeName "ALOY.exe"

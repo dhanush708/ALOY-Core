@@ -2,7 +2,7 @@
 REM ============================================================
 REM  ALOY — Windows Build Script
 REM  Produces: dist/ALOY/ (PyInstaller bundle)
-REM            dist/installer/ALOY-Setup-1.0.0.exe (Inno Setup)
+REM            dist/installer/ALOY-Setup-1.0.1.exe (Inno Setup)
 REM
 REM  Prerequisites:
 REM    pip install pyinstaller
@@ -12,7 +12,7 @@ REM ============================================================
 echo.
 echo  ==========================================
 echo   ALOY Build System — Windows Release
-echo   Version 1.0.0
+echo   Version 1.0.1
 echo  ==========================================
 echo.
 
@@ -27,7 +27,6 @@ echo [2/5] Verifying Python dependencies...
 pip install -r requirements.txt --quiet
 if %errorlevel% neq 0 (
     echo ERROR: pip install failed. Ensure Python 3.11+ is on PATH.
-    pause
     exit /b 1
 )
 echo       Done.
@@ -45,7 +44,6 @@ echo [4/5] Building application with PyInstaller...
 pyinstaller --noconfirm installer/aloy.spec
 if %errorlevel% neq 0 (
     echo ERROR: PyInstaller build failed.
-    pause
     exit /b 1
 )
 echo       Done. Output: dist\ALOY\
@@ -58,7 +56,7 @@ if exist "%ISCC_PATH%" (
     if %errorlevel% neq 0 (
         echo WARNING: Inno Setup build failed. Check installer/aloy.iss
     ) else (
-        echo       Done. Output: dist\installer\ALOY-Setup-1.0.0.exe
+        echo       Done. Output: dist\installer\ALOY-Setup-1.0.1.exe
     )
 ) else (
     where ISCC.exe >nul 2>&1
@@ -67,7 +65,7 @@ if exist "%ISCC_PATH%" (
         if %errorlevel% neq 0 (
             echo WARNING: Inno Setup build failed. Check installer/aloy.iss
         ) else (
-            echo       Done. Output: dist\installer\ALOY-Setup-1.0.0.exe
+            echo       Done. Output: dist\installer\ALOY-Setup-1.0.1.exe
         )
     ) else (
         echo WARNING: ISCC.exe not found. Skipping installer creation.
@@ -81,7 +79,6 @@ echo  ==========================================
 echo   Build complete!
 echo.
 echo   Portable bundle : dist\ALOY\ALOY.exe
-echo   Installer       : dist\installer\ALOY-Setup-1.0.0.exe
+echo   Installer       : dist\installer\ALOY-Setup-1.0.1.exe
 echo  ==========================================
 echo.
-pause

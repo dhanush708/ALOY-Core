@@ -65,3 +65,30 @@ async def test_stream_filter_headers():
     full_cleaned_response = "".join(cleaned_tokens)
     assert "Assistant:" not in full_cleaned_response
     assert "Hi Dhanush." in full_cleaned_response
+
+def test_process_chunk_fragmented():
+    integrity = PromptIntegrityFilter()
+    
+    tokens = [
+        "Hello ", "world, ", 
+        "<id", "entity>", "hidden ", "instructions", "</ide", "nt", "ity>", 
+        "this is clean."
+    ]
+    
+    cleaned_tokens = []
+    for token in tokens:
+        clean_token = integrity.process_chunk(token)
+        if clean_token:
+            cleaned_tokens.append(clean_token)
+            
+    final_token = integrity.flush()
+    if final_token:
+        cleaned_tokens.append(final_token)
+        
+    full_cleaned_response = "".join(cleaned_tokens)
+    assert "hidden" not in full_cleaned_response
+    assert "instructions" not in full_cleaned_response
+    assert "<identity>" not in full_cleaned_response
+    assert "</identity>" not in full_cleaned_response
+    assert "Hello world, this is clean." in full_cleaned_response
+

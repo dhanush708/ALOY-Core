@@ -447,13 +447,15 @@ async def test_topic_drift_detector(prev_query, current_query, expected_same):
 @pytest.mark.asyncio
 async def test_hallucination_protection(ranked_sources, expect_fallback):
     """Verifies that if evidence is weak or empty, pipeline returns exact protection string."""
-    # Setup mock synthesizer
-    router = mock_model_router_factory(synthesis_response="I couldn't verify this information from reliable sources.")
+    # The mock router returns a phrase that triggers the hallucination sentinel
+    # (contains 'cutoff' or 'couldn't verify' or 'cannot verify') so the
+    # pipeline overwrites it with the canonical failure string.
+    router = mock_model_router_factory(synthesis_response="My training cutoff means I cannot verify.")
     pipeline = SearchPipeline(db_pool=None, model_router=router)
     
     result = await pipeline.synthesize_answer("test query", ranked_sources)
     if expect_fallback:
-        assert result["answer"] == "I couldn't verify this information from reliable sources."
+        assert result["answer"] == "I could not find enough reliable evidence."
         assert "cutoff" not in result["answer"].lower()
     else:
         # Override mock synthesizer response for successful cases
@@ -461,4 +463,4 @@ async def test_hallucination_protection(ranked_sources, expect_fallback):
         pipeline = SearchPipeline(db_pool=None, model_router=router)
         result = await pipeline.synthesize_answer("test query", ranked_sources)
         assert "stable" in result["answer"]
-        assert "couldn't verify" not in result["answer"]
+        assert "could not find enough reliable evidence" not in result["answer"]

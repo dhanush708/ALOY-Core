@@ -1,5 +1,6 @@
 import logging
 import sys
+import os
 import yaml
 from pathlib import Path
 
@@ -54,7 +55,8 @@ async def boot() -> ServiceRegistry:
     # to subsystems that need them.
     
     # 3. Setup Database
-    db_path = config.get("database", {}).get("path", "data/aloy.db")
+    default_db_path = str(Path(os.environ.get("APPDATA", Path.home())) / "ALOY" / "data" / "aloy.db")
+    db_path = config.get("database", {}).get("path", default_db_path)
     db_pool = DatabaseConnectionPool(db_path)
     
     # Wire db_pool and event_bus to telemetry

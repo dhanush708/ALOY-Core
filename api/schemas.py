@@ -4,6 +4,7 @@ from datetime import datetime
 
 class MessageRequest(BaseModel):
     content: str
+    override: Optional[str] = None
 
 class ConversationStateResponse(BaseModel):
     id: str
@@ -41,3 +42,10 @@ class ConversationListItemResponse(BaseModel):
 class RenameRequest(BaseModel):
     title: str
 
+class ReportBugRequest(BaseModel):
+    title: str
+    description: str
+    steps_to_reproduce: str
+    expected_behavior: str
+    actual_behavior: str
+    system_information: str

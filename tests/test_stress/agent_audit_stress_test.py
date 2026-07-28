@@ -292,6 +292,7 @@ async def test_workspace_lock_concurrency(db_pool, event_bus, workspace_dir):
 async def test_conversation_engine_streaming(db_pool):
     memory = AsyncMock()
     model_router = MagicMock()
+    model_router.resolve_model.return_value = "mock_model"
     
     # Mock LLM generation stream returning async iterator
     class AsyncIteratorMock:
@@ -308,6 +309,7 @@ async def test_conversation_engine_streaming(db_pool):
             raise StopAsyncIteration
             
     model_router.stream = MagicMock(side_effect=lambda *args, **kwargs: AsyncIteratorMock(["Answer ", "complete"]))
+    model_router.stream_chat = MagicMock(side_effect=lambda *args, **kwargs: AsyncIteratorMock(["Answer ", "complete"]))
     model_router.generate = AsyncMock(return_value="Answer complete")
     
     engine = ConversationEngine(db_pool, memory, model_router)

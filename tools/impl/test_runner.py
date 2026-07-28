@@ -50,11 +50,21 @@ class RunnerTool(BaseTool):
             command.append(path)
         command.extend(options)
         
+        is_frozen = getattr(sys, "frozen", False)
+        out_temp_path = None
+        env = __import__("os").environ.copy()
+        if is_frozen:
+            import tempfile
+            with tempfile.NamedTemporaryFile(suffix=".log", delete=False) as f2:
+                out_temp_path = f2.name
+            env["ALOY_STDOUT_FILE"] = out_temp_path
+
         try:
             process = await asyncio.create_subprocess_exec(
                 *command,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                env=env,
                 creationflags=CREATION_FLAGS
             )
             
@@ -70,20 +80,39 @@ class RunnerTool(BaseTool):
                 raise
                 
             exit_code = process.returncode
-            out = stdout.decode("utf-8", errors="replace")
-            err = stderr.decode("utf-8", errors="replace")
+            if is_frozen:
+                with open(out_temp_path, "r", encoding="utf-8") as f:
+                    out = f.read()
+                err = ""
+            else:
+                out = stdout.decode("utf-8", errors="replace")
+                err = stderr.decode("utf-8", errors="replace")
         except NotImplementedError:
             def run_sync():
                 p = subprocess.run(
                     command,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
+                    env=env,
                     creationflags=CREATION_FLAGS
                 )
                 return p.returncode, p.stdout, p.stderr
             exit_code, stdout_bytes, stderr_bytes = await asyncio.to_thread(run_sync)
-            out = stdout_bytes.decode("utf-8", errors="replace")
-            err = stderr_bytes.decode("utf-8", errors="replace")
+            if is_frozen:
+                with open(out_temp_path, "r", encoding="utf-8") as f:
+                    out = f.read()
+                err = ""
+            else:
+                out = stdout_bytes.decode("utf-8", errors="replace")
+                err = stderr_bytes.decode("utf-8", errors="replace")
+        finally:
+            if out_temp_path:
+                import os
+                if os.path.exists(out_temp_path):
+                    try:
+                        os.remove(out_temp_path)
+                    except Exception:
+                        pass
         
         result = []
         if out:

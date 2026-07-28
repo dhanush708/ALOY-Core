@@ -84,8 +84,8 @@ ROUTING_TABLE: Dict[str, Dict[str, Any]] = {
     },
     # Catch-all defaults
     "memory_query": {
-        "primary": MODELS_CONFIG["vision"]["name"],
-        "fallback": MODELS_CONFIG["chat"]["name"],
+        "primary": MODELS_CONFIG["chat"]["name"],
+        "fallback": MODELS_CONFIG["vision"]["name"],
         "priority": Priority.CONVERSATION,
     },
     "tool_request": {
@@ -140,15 +140,28 @@ class ModelRouter:
         conversation_id: Optional[str] = None,
     ) -> str:
         """Return the model name to use for *task*.
-
-        If *conversation_id* is supplied and a model was already used for
-        that conversation, prefer it for continuity.
+        
+        Evaluates task route, continuity lock, and degradation state.
         """
-        if conversation_id and conversation_id in self._conversation_models:
-            return self._conversation_models[conversation_id]
-
         route = ROUTING_TABLE.get(task, ROUTING_TABLE["simple_chat"])
-        return route["primary"]
+        primary = route["primary"]
+        fallback = route.get("fallback")
+
+        model = primary
+
+        # Only preserve continuity if the bound model is valid for the current intent
+        if conversation_id and conversation_id in self._conversation_models:
+            bound_model = self._conversation_models[conversation_id]
+            if bound_model == primary:
+                model = bound_model
+            elif fallback and bound_model == fallback and self.tracker.is_degraded(primary):
+                model = bound_model
+
+        # Pre-stream degradation gate
+        if self.tracker.is_degraded(model) and fallback and fallback != model:
+            model = fallback
+
+        return model
 
     # ------------------------------------------------------------------
     # Public: non-streaming generation
@@ -162,17 +175,13 @@ class ModelRouter:
     ) -> str:
         """Non-streaming LLM generation with fallback and tracking."""
         route = ROUTING_TABLE.get(task, ROUTING_TABLE["simple_chat"])
-        primary = route["primary"]
         fallback = route.get("fallback")
         priority = route.get("priority", Priority.CONVERSATION)
 
         keep_alive = "10s" if priority == Priority.BACKGROUND else "5m"
 
-        model = primary
-        selection_reason = f"resolved as primary for task '{task}'"
-        if conversation_id and conversation_id in self._conversation_models:
-            model = self._conversation_models[conversation_id]
-            selection_reason = f"conversation continuity lock for conversation '{conversation_id}'"
+        model = self.resolve_model(task, conversation_id)
+        selection_reason = "resolved dynamically"
 
         logger.info("ModelRouter.generate: selected model '%s' (reason: %s)", model, selection_reason)
 
@@ -221,6 +230,106 @@ class ModelRouter:
             await self.coordinator.release()
 
     # ------------------------------------------------------------------
+    # Public: chat-API streaming (conversational tasks only)
+    # ------------------------------------------------------------------
+    async def stream_chat(
+        self,
+        task: str,
+        messages: list,
+        options: Optional[Dict[str, Any]] = None,
+        conversation_id: Optional[str] = None,
+    ) -> AsyncGenerator[str, None]:
+        """Streaming generation via /api/chat (messages API).
+
+        Used for all user-facing conversational turns so that the system
+        prompt is never part of the text completion and cannot be echoed.
+
+        Pre-stream fallback (v1.0.2 H1):
+          Before opening the HTTP stream, the ModelTracker is consulted.
+          If the selected model's runtime error rate has crossed the
+          degradation threshold (≥10 %), the routing-table fallback model
+          is used instead.  This happens before any bytes are sent so the
+          user never sees a truncated partial response.
+          Mid-stream fallback is NOT supported.
+        """
+        route = ROUTING_TABLE.get(task, ROUTING_TABLE["simple_chat"])
+        priority = route.get("priority", Priority.CONVERSATION)
+        keep_alive = "10s" if priority == Priority.BACKGROUND else "5m"
+
+        model = self.resolve_model(task, conversation_id)
+        selection_reason = "resolved dynamically"
+        
+        # Post-resolution continuity update: if the resolved model is different
+        # than what was previously bound (e.g. because of degradation or intent switch),
+        # this updates the lock to the newly chosen model.
+        if conversation_id:
+            self._conversation_models[conversation_id] = model
+
+        logger.info("ModelRouter.stream_chat: selected model '%s' (reason: %s)", model, selection_reason)
+
+        await self.coordinator.acquire(priority)
+        start = time.perf_counter()
+        try:
+            tokens_in = sum(self.token_manager.count_tokens(m.get("content", "")) for m in messages)
+            full_response: List[str] = []
+            async for token in self.client.chat_stream(model, messages, options, keep_alive=keep_alive):
+                full_response.append(token)
+                yield token
+
+            elapsed = (time.perf_counter() - start) * 1000
+            self.tracker.record_success(model, task, elapsed)
+
+            result_str = "".join(full_response)
+            tokens_out = self.token_manager.count_tokens(result_str)
+            if self.telemetry:
+                self.telemetry.record_model_call(model, task, tokens_in, tokens_out, elapsed)
+
+        except Exception as e:
+            self.tracker.record_error(model, task)
+            logger.error("Chat streaming failed for %s with %s: %s", task, model, e)
+            yield " [Connection Error]"
+        finally:
+            await self.coordinator.release()
+
+
+    async def generate_chat(
+        self,
+        task: str,
+        messages: list,
+        options: Optional[Dict[str, Any]] = None,
+        conversation_id: Optional[str] = None,
+    ) -> str:
+        """Non-streaming generation via /api/chat (messages API)."""
+        route = ROUTING_TABLE.get(task, ROUTING_TABLE["simple_chat"])
+        primary = route["primary"]
+        fallback = route.get("fallback")
+        priority = route.get("priority", Priority.CONVERSATION)
+        keep_alive = "10s" if priority == Priority.BACKGROUND else "5m"
+
+        model = primary
+
+        logger.info("ModelRouter.generate_chat: selected model '%s' for task '%s'", model, task)
+
+        await self.coordinator.acquire(priority)
+        try:
+            result = await self.client.chat(model, messages, options, keep_alive=keep_alive)
+            return result
+        except Exception as primary_err:
+            self.tracker.record_error(model, task)
+            logger.warning("Primary model %s failed for %s: %s", model, task, primary_err)
+            if fallback and fallback != model:
+                try:
+                    result = await self.client.chat(fallback, messages, options, keep_alive=keep_alive)
+                    return result
+                except Exception as fb_err:
+                    self.tracker.record_error(fallback, task)
+                    logger.error("Fallback model %s also failed: %s", fallback, fb_err)
+                    raise fb_err
+            raise primary_err
+        finally:
+            await self.coordinator.release()
+
+    # ------------------------------------------------------------------
     # Public: streaming generation
     # ------------------------------------------------------------------
     async def stream(
@@ -244,9 +353,6 @@ class ModelRouter:
 
         model = primary
         selection_reason = f"resolved as primary for task '{task}'"
-        if conversation_id and conversation_id in self._conversation_models:
-            model = self._conversation_models[conversation_id]
-            selection_reason = f"conversation continuity lock for conversation '{conversation_id}'"
 
         logger.info("ModelRouter.stream: selected model '%s' (reason: %s)", model, selection_reason)
 
@@ -266,9 +372,6 @@ class ModelRouter:
             tokens_out = self.token_manager.count_tokens(result_str)
             if self.telemetry:
                 self.telemetry.record_model_call(model, task, tokens_in, tokens_out, elapsed)
-
-            if conversation_id:
-                self._conversation_models[conversation_id] = model
 
         except Exception as e:
             self.tracker.record_error(model, task)

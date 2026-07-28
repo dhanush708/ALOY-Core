@@ -15,9 +15,13 @@ class ConversationContext:
     
     system_prompt: str = ""
     full_prompt: str = ""
-    
+    # Structured messages list for /api/chat (preferred for conversational tasks)
+    # Format: [{"role": "system"|"user"|"assistant", "content": str}, ...]
+    messages: List[Dict] = field(default_factory=list)
+
     intent: Optional[str] = None
     model: Optional[str] = None
+    model_override: Optional[str] = None
     
     response_stream: Optional[AsyncGenerator[str, None]] = None
     final_response: str = ""
@@ -34,6 +38,7 @@ class ConversationContext:
     search_result_count: int = 0         # Number of deduplicated result snippets
     search_sources: List[Dict] = field(default_factory=list)  # [{title, url, snippet}]
     search_timestamp: str = ""           # UTC timestamp string of when search ran
+    search_failure_reason: str = ""     # "no_results" | "low_confidence" | "system_error" | ""
 
 
 class PipelineStage:

@@ -315,7 +315,6 @@ async def test_live_search_triggers():
         await stage.process(context)
         
         mock_knowledge_router.query_escalation.assert_called_once_with(q)
-        assert "<search_results" in context.full_prompt
         assert "[LIVE INTERNET SEARCH RESULTS]" in context.full_prompt
         assert context.search_triggered is True
         assert context.search_succeeded is True
@@ -362,7 +361,8 @@ async def test_search_failure_produces_failed_block():
 
     assert context.search_triggered is True
     assert context.search_succeeded is False
-    assert "[LIVE SEARCH FAILED]" in context.full_prompt
+    assert "[SEARCH RETURNED NO RESULTS]" in context.full_prompt
+    assert context.search_failure_reason == "no_results"
     assert "training cutoff" not in context.full_prompt.lower()
 
 
@@ -463,6 +463,7 @@ def test_conversation_context_search_fields_exist():
     assert ctx.search_result_count == 0
     assert ctx.search_sources == []
     assert ctx.search_timestamp == ""
+    assert ctx.search_failure_reason == ""
 
 
 # ==========================================================================

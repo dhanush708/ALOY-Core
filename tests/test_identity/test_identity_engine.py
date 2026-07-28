@@ -151,3 +151,136 @@ async def test_identity_prompt_generation(setup_subsystems):
     assert "TestProject" in prompt_with_workspace
     assert "server.py, engine.py" in prompt_with_workspace
     assert "main" in prompt_with_workspace
+
+
+# =============================================================================
+# Personality Recovery v1.0.2 Regression Tests
+# =============================================================================
+
+@pytest.mark.asyncio
+async def test_personality_memory_bridge_injects_conversation_memories(setup_subsystems):
+    """When conversation_memory entries exist, they must appear in the
+    identity prompt as active personality guidance."""
+    pool, manager, engine = setup_subsystems
+    await engine.initialize_if_needed()
+
+    # Seed conversation_memory entries simulating compaction-extracted facts
+    await manager.store(
+        type="conversation_memory",
+        content="User prefers short, direct answers without fluff.",
+        tier="short_term",
+        importance=0.6,
+        metadata={"source_conversation_id": "c_test"}
+    )
+    await manager.store(
+        type="conversation_memory",
+        content="User works primarily in Python and TypeScript.",
+        tier="short_term",
+        importance=0.6
+    )
+
+    prompt = await engine.generate_identity_prompt("simple_chat", turn_count=2)
+    assert "User Style & Preferences (learned from conversation)" in prompt
+    assert "User prefers short, direct answers without fluff." in prompt
+    assert "User works primarily in Python and TypeScript." in prompt
+
+
+@pytest.mark.asyncio
+async def test_personality_memory_bridge_empty_when_no_memories(setup_subsystems):
+    """When no conversation_memory entries exist, the bridge must not inject
+    an empty section."""
+    pool, manager, engine = setup_subsystems
+    await engine.initialize_if_needed()
+
+    prompt = await engine.generate_identity_prompt("simple_chat", turn_count=2)
+    assert "User Style & Preferences (learned from conversation)" not in prompt
+
+
+@pytest.mark.asyncio
+async def test_personality_styles_before_capabilities_in_prompt(setup_subsystems):
+    """v1.0.2 reorder: PERSONALITY STYLES section must appear before
+    CURRENT SYSTEM CAPABILITIES in the assembled prompt."""
+    pool, manager, engine = setup_subsystems
+    await engine.initialize_if_needed()
+
+    prompt = await engine.generate_identity_prompt("simple_chat", turn_count=2)
+
+    personality_idx = prompt.find("PERSONALITY STYLES & INTERACTION PRINCIPLES")
+    capabilities_idx = prompt.find("CURRENT SYSTEM CAPABILITIES")
+    workspace_idx = prompt.find("CURRENT WORKSPACE & PROJECT CONTEXT")
+
+    assert personality_idx != -1, "Personality section must exist"
+    assert capabilities_idx != -1, "Capabilities section must exist"
+
+    # Personality BEFORE capabilities
+    assert personality_idx < capabilities_idx, (
+        "Personality must appear BEFORE capabilities "
+        f"(personality at {personality_idx}, capabilities at {capabilities_idx})"
+    )
+    # Capabilities BEFORE workspace (sanity check on ordering)
+    assert capabilities_idx < workspace_idx, (
+        "Capabilities must appear BEFORE workspace"
+    )
+
+
+@pytest.mark.asyncio
+async def test_personality_memory_bridge_respects_limit_5(setup_subsystems):
+    """The bridge must retrieve at most 5 conversation_memory entries even
+    when more exist."""
+    pool, manager, engine = setup_subsystems
+    await engine.initialize_if_needed()
+
+    # Seed 10 entries
+    for i in range(10):
+        await manager.store(
+            type="conversation_memory",
+            content=f"Memory fact number {i} about user style.",
+            tier="short_term",
+            importance=0.5
+        )
+
+    prompt = await engine.generate_identity_prompt("simple_chat", turn_count=2)
+
+    # Count occurrences of "Memory fact number" in the prompt
+    count = prompt.count("Memory fact number")
+    assert count <= 5, f"Bridge must show at most 5 entries but found {count}"
+    assert count >= 1, f"Bridge must show at least 1 entry but found {count}"
+
+
+def test_integrity_filter_preserves_personality_memories():
+    """The PromptIntegrityFilter must NOT strip the new bridge section
+    'User Style & Preferences (learned from conversation)' or its content."""
+    from identity.integrity import PromptIntegrityFilter
+
+    bridge_content = """User Style & Preferences (learned from conversation):
+- User prefers short, direct answers without fluff.
+- User works primarily in Python and TypeScript."""
+
+    # 1. Full-text clean must leave bridge content intact
+    filt = PromptIntegrityFilter()
+    cleaned = filt.clean_text(bridge_content)
+    assert "User Style & Preferences" in cleaned
+    assert "User prefers short, direct answers" in cleaned
+    assert "Python and TypeScript" in cleaned
+
+    # 2. The response-start sanitizer must not strip it either
+    filt2 = PromptIntegrityFilter()
+    sanitized = filt2.sanitize_response_start(bridge_content)
+    assert "User Style & Preferences" in sanitized
+    assert "User prefers short, direct answers" in sanitized
+
+    # 3. Streaming process_chunk must pass it through
+    filt3 = PromptIntegrityFilter()
+    tokens = []
+    for chunk in ["User Style & Preferences ", "(learned from conversation):\n",
+                  "- User prefers short, ", "direct answers without fluff.\n",
+                  "- User works primarily in Python and TypeScript."]:
+        clean = filt3.process_chunk(chunk)
+        if clean:
+            tokens.append(clean)
+    final = filt3.flush()
+    if final:
+        tokens.append(final)
+    assembled = "".join(tokens)
+    assert "User Style & Preferences" in assembled
+    assert "Python and TypeScript" in assembled

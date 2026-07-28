@@ -592,6 +592,64 @@ a {
     overflow: hidden;
 }
 
+.dashboard-container.right-collapsed {
+    grid-template-columns: var(--sidebar-width) 1fr 0px !important;
+}
+
+/* Model Override Segmented Pill Control */
+.chat-input-overrides {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    margin-bottom: 8px;
+    padding: 0 4px;
+    position: relative;
+    z-index: 10;
+}
+
+.model-override-segmented {
+    display: inline-flex;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 3px;
+    gap: 2px;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.override-segment {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    font-weight: 500;
+    padding: 4px 12px;
+    border-radius: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+    user-select: none;
+    outline: none;
+}
+
+.override-segment:hover {
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.override-segment.active {
+    background: var(--accent-gradient);
+    color: #ffffff;
+    font-weight: 600;
+    box-shadow: 0 2px 8px var(--accent-glow);
+}
+
+.override-segment:focus-visible {
+    outline: 2px solid var(--accent);
+}
+
 .sidebar-right h2 {
     font-family: var(--font-heading);
     font-size: 1.2rem;
@@ -1086,6 +1144,13 @@ code {
 
 .btn-action-outline:hover {
     background: var(--accent-glow);
+}
+
+.btn-action-outline.active {
+    background: var(--accent);
+    color: var(--text-inverse);
+    border-color: var(--accent);
+    box-shadow: 0 0 10px var(--accent-glow);
 }
 
 .btn-primary {
@@ -1935,6 +2000,32 @@ code {
     font-size: 1.4rem;
     color: var(--text-muted);
     transition: color 0.2s;
+}
+
+.bug-report-btn {
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.bug-report-btn:hover {
+    background: rgba(14, 165, 233, 0.1);
+    box-shadow: 0 0 10px rgba(14, 165, 233, 0.2);
+}
+
+.sidebar-toggle:hover {
+    color: var(--text);
+    background: rgba(255,255,255,0.05);
 }
 
 .wizard-use-card:hover {

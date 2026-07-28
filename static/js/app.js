@@ -97,16 +97,41 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // Sidebar Toggles
-    sidebarToggleLeft.addEventListener("click", () => {
-        sidebarLeft.classList.toggle("active");
+    const sidebarCloseRight = document.getElementById("sidebar-close-right");
+    const dashboardContainer = document.querySelector(".dashboard-container");
+
+    function updateRightSidebarLayout() {
+        if (rightSidebarCollapsed) {
+            sidebarRight?.classList.add("collapsed");
+            dashboardContainer?.classList.add("right-collapsed");
+        } else {
+            sidebarRight?.classList.remove("collapsed");
+            dashboardContainer?.classList.remove("right-collapsed");
+        }
+    }
+
+    // Ensure initial state matches
+    updateRightSidebarLayout();
+
+    sidebarToggleLeft?.addEventListener("click", () => {
+        sidebarLeft?.classList.toggle("active");
     });
 
-    sidebarToggleRight.addEventListener("click", () => {
+    sidebarToggleRight?.addEventListener("click", () => {
         rightSidebarCollapsed = !rightSidebarCollapsed;
-        if (rightSidebarCollapsed) {
-            sidebarRight.classList.add("collapsed");
-        } else {
-            sidebarRight.classList.remove("collapsed");
+        updateRightSidebarLayout();
+    });
+
+    sidebarCloseRight?.addEventListener("click", () => {
+        rightSidebarCollapsed = true;
+        updateRightSidebarLayout();
+    });
+
+    // Keyboard support: Escape closes Device Info panel
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && !rightSidebarCollapsed) {
+            rightSidebarCollapsed = true;
+            updateRightSidebarLayout();
         }
     });
 
@@ -467,7 +492,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // ==========================================
     // 5. Post SSE Chunk Stream Client
     // ==========================================
-    async function sendMessage(text) {
+    async function sendMessage(text, override = null) {
         if (!activeConversationId) {
             // Create a new session first
             try {
@@ -522,10 +547,15 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
             updateStatusIndicator("router", "Working", "Routing query and initiating LLM stream...");
             
+            const payload = { content: text };
+            if (override) {
+                payload.override = override;
+            }
+            
             const response = await fetch(`/api/conversation/${activeConversationId}/message`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ content: text })
+                body: JSON.stringify(payload)
             });
             
             if (!response.ok) throw new Error(`Server error: ${response.status}`);
@@ -646,12 +676,42 @@ document.addEventListener("DOMContentLoaded", () => {
             finalizeStream();
             
         } catch (err) {
-            console.error("Chat stream error:", err);
+            console.error(err);
             finalizeStream();
             bodyEl.textContent = "[Connection error — please try again]";
             updateStatusIndicator("router", "Error", "Failed to retrieve LLM response.");
         }
     }
+
+    // Segmented Model Override Pill Control
+    const btnOverrideAuto = document.getElementById("btn-override-auto");
+    const btnOverrideThink = document.getElementById("btn-override-think");
+    const btnOverrideCode = document.getElementById("btn-override-code");
+    let activeOverride = null;
+
+    function setOverrideMode(mode) {
+        activeOverride = mode;
+        [btnOverrideAuto, btnOverrideThink, btnOverrideCode].forEach(btn => {
+            if (!btn) return;
+            btn.classList.remove("active");
+            btn.setAttribute("aria-checked", "false");
+        });
+
+        if (mode === "reasoning" && btnOverrideThink) {
+            btnOverrideThink.classList.add("active");
+            btnOverrideThink.setAttribute("aria-checked", "true");
+        } else if (mode === "coding" && btnOverrideCode) {
+            btnOverrideCode.classList.add("active");
+            btnOverrideCode.setAttribute("aria-checked", "true");
+        } else if (btnOverrideAuto) {
+            btnOverrideAuto.classList.add("active");
+            btnOverrideAuto.setAttribute("aria-checked", "true");
+        }
+    }
+
+    btnOverrideAuto?.addEventListener("click", () => setOverrideMode(null));
+    btnOverrideThink?.addEventListener("click", () => setOverrideMode("reasoning"));
+    btnOverrideCode?.addEventListener("click", () => setOverrideMode("coding"));
 
     chatForm.addEventListener("submit", (e) => {
         e.preventDefault();
@@ -659,7 +719,11 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!text) return;
         
         chatInput.value = "";
-        sendMessage(text);
+        
+        const currentOverride = activeOverride;
+        setOverrideMode(null);
+        
+        sendMessage(text, currentOverride);
     });
 
     // Handle Enter to submit, Shift+Enter for newline
@@ -2124,6 +2188,12 @@ document.addEventListener("DOMContentLoaded", () => {
     // Onboarding & Dynamic Profile System
     // ==========================================
     async function checkOnboardingStatus() {
+        loadAgentSessions();
+        await loadConversations();
+        if (allSessionsList.length > 0 && !activeConversationId) {
+            selectConversation(allSessionsList[0].id);
+        }
+
         try {
             const res = await fetch("/api/profile/status");
             const data = await res.json();
@@ -2132,12 +2202,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 wizardInit();
             } else {
                 document.getElementById("onboarding-overlay").style.display = "none";
-                loadAgentSessions();
-                loadConversations();
             }
         } catch (err) {
             console.error("Error checking onboarding status:", err);
-            wizardInit();
+            document.getElementById("onboarding-overlay").style.display = "none";
         }
     }
 
@@ -2953,27 +3021,71 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     function triggerBugReport() {
-        const email = "anbudhanush31@gmail.com";
-        const subject = encodeURIComponent("ALOY Bug Report");
-        const body = encodeURIComponent(
-`* ALOY Version: 1.0
-* Operating System: ${navigator.userAgent} (please edit if different)
-
-* Steps to Reproduce:
-1. 
-2. 
-
-* Expected Behaviour:
-
-
-* Actual Behaviour:
-
-
-* Additional Notes:
-`
-        );
-        window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+        const modal = document.getElementById("bug-report-modal");
+        if (modal) {
+            modal.style.display = "flex";
+            document.getElementById("bug-title").value = "";
+            document.getElementById("bug-desc").value = "";
+            document.getElementById("bug-steps").value = "";
+            document.getElementById("bug-expected").value = "";
+            document.getElementById("bug-actual").value = "";
+            document.getElementById("bug-report-status").style.display = "none";
+        }
     }
+
+    document.getElementById("btn-cancel-bug")?.addEventListener("click", () => {
+        document.getElementById("bug-report-modal").style.display = "none";
+    });
+
+    document.getElementById("btn-submit-bug")?.addEventListener("click", async () => {
+        const statusEl = document.getElementById("bug-report-status");
+        statusEl.style.display = "block";
+        statusEl.style.color = "#94a3b8";
+        statusEl.textContent = "Submitting report...";
+
+        const payload = {
+            title: document.getElementById("bug-title").value || "Untitled Bug Report",
+            description: document.getElementById("bug-desc").value || "No description provided.",
+            steps_to_reproduce: document.getElementById("bug-steps").value || "None",
+            expected_behavior: document.getElementById("bug-expected").value || "None",
+            actual_behavior: document.getElementById("bug-actual").value || "None",
+            system_information: navigator.userAgent
+        };
+
+        try {
+            const metaRes = await fetch("/api/profile/metadata");
+            if (metaRes.ok) {
+                const meta = await metaRes.json();
+                if (meta.version) {
+                    payload.system_information = `Version: ${meta.version} | OS: ${navigator.userAgent}`;
+                }
+            }
+        } catch (e) {
+            // ignore
+        }
+
+        try {
+            const res = await fetch("/api/system/report-bug", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+            if (res.ok) {
+                const data = await res.json();
+                statusEl.style.color = "#4ade80";
+                statusEl.innerHTML = `<i class="fa-solid fa-check"></i> ${data.message}`;
+                setTimeout(() => {
+                    document.getElementById("bug-report-modal").style.display = "none";
+                }, 2000);
+            } else {
+                statusEl.style.color = "#ef4444";
+                statusEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Failed to submit report. Server returned error.`;
+            }
+        } catch (err) {
+            statusEl.style.color = "#ef4444";
+            statusEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Network error connecting to server.`;
+        }
+    });
 
     document.getElementById("btn-report-bug-about")?.addEventListener("click", triggerBugReport);
     document.getElementById("btn-report-bug-settings")?.addEventListener("click", triggerBugReport);
@@ -3190,6 +3302,44 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("btn-diag-check-updates")?.addEventListener("click", (e) => {
         checkUpdates(e.currentTarget);
     });
+
+    // ==========================================================================
+    // ALOY Bug Report Logic
+    // ==========================================================================
+    const btnBugReport = document.getElementById("bug-report-btn");
+    if (btnBugReport) {
+        btnBugReport.addEventListener("click", triggerBugReport);
+    }
+
+    // ==========================================================================
+    // ALOY Quit Switch Logic
+    // ==========================================================================
+    const btnQuitAloy = document.getElementById("btn-quit-aloy");
+    const modalQuitOverlay = document.getElementById("quit-modal-overlay");
+    const btnCancelQuit = document.getElementById("btn-cancel-quit");
+    const btnConfirmQuit = document.getElementById("btn-confirm-quit");
+    const shutdownOverlay = document.getElementById("shutdown-success-overlay");
+
+    if (btnQuitAloy && modalQuitOverlay && btnCancelQuit && btnConfirmQuit && shutdownOverlay) {
+        btnQuitAloy.addEventListener("click", () => {
+            modalQuitOverlay.style.display = "flex";
+        });
+
+        btnCancelQuit.addEventListener("click", () => {
+            modalQuitOverlay.style.display = "none";
+        });
+
+        btnConfirmQuit.addEventListener("click", async () => {
+            modalQuitOverlay.style.display = "none";
+            try {
+                const res = await fetch("/api/system/quit", { method: "POST" });
+                shutdownOverlay.style.display = "flex";
+            } catch (err) {
+                console.error("Quit signal error:", err);
+                shutdownOverlay.style.display = "flex";
+            }
+        });
+    }
 });
 
 

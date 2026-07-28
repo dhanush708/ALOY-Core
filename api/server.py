@@ -1,3 +1,15 @@
+import sys
+
+# Hotfix for PyInstaller missing metadata for email-validator
+# We completely mock EmailStr to prevent Pydantic from trying to load email_validator
+try:
+    import pydantic
+    import pydantic.networks
+    pydantic.EmailStr = str
+    pydantic.networks.EmailStr = str
+except ImportError:
+    pass
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -216,7 +228,7 @@ async def lifespan(app: FastAPI):
     # Initialize Backup and Rollback Managers
     from database.backup import DatabaseBackupManager
     from security.rollback import AdvancedRollbackEngine
-    app.state.backup_manager = DatabaseBackupManager("data/aloy.db")
+    app.state.backup_manager = DatabaseBackupManager(DB_PATH)
     app.state.rollback_engine = AdvancedRollbackEngine(db_pool, snapshot_manager)
 
     # Grid wires the 9 agents
@@ -368,3 +380,142 @@ async def serve_index():
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# BUG REPORT ROUTE
+# ══════════════════════════════════════════════════════════════════════════════
+from api.schemas import ReportBugRequest
+import smtplib
+from email.message import EmailMessage
+import datetime
+import json
+
+@app.post("/api/system/report-bug")
+async def report_bug(req: ReportBugRequest):
+    support_email = "aloy.support@gmail.com"
+    content = f"""ALOY Bug Report
+
+Title: {req.title}
+Version/System: {req.system_information}
+
+Expected Behavior:
+{req.expected_behavior}
+
+Actual Behavior:
+{req.actual_behavior}
+
+Steps to Reproduce:
+{req.steps_to_reproduce}
+
+Description:
+{req.description}
+"""
+    # Primary: Send email
+    email_success = False
+    try:
+        # We attempt a local SMTP relay or default submission port (often fails if not configured, which triggers fallback)
+        msg = EmailMessage()
+        msg.set_content(content)
+        msg["Subject"] = f"ALOY Bug Report: {req.title}"
+        msg["From"] = "aloy-system@localhost"
+        msg["To"] = support_email
+        
+        # Try local SMTP. If this fails, we catch it.
+        with smtplib.SMTP("localhost", 25, timeout=2) as s:
+            s.send_message(msg)
+        email_success = True
+    except Exception as e:
+        logger.warning(f"Failed to send bug report email: {e}. Falling back to local file.")
+        
+    if email_success:
+        return {"status": "success", "message": "Report sent via email.", "path": None}
+        
+    # Fallback: Save to local file
+    try:
+        reports_dir = _app_data.parent / "logs" / "reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        report_file = reports_dir / f"bug_report_{timestamp}.txt"
+        with open(report_file, "w", encoding="utf-8") as f:
+            f.write(content)
+        return {"status": "success", "message": "Report saved locally.", "path": str(report_file)}
+    except Exception as e:
+        logger.error(f"Failed to save bug report locally: {e}")
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail="Failed to send email and failed to save report locally.")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SYSTEM SHUTDOWN ROUTE
+# ══════════════════════════════════════════════════════════════════════════════
+@app.post("/api/system/quit")
+async def quit_application():
+    import threading
+    import time
+    import gc
+    import uvicorn
+    import signal
+    import os
+    
+    def _shutdown():
+        logger.info("Quit switch activated. Initiating ALOY shutdown sequence...")
+        
+        # 1. Stop active agents & session
+        try:
+            if hasattr(app.state, "project_manager") and app.state.project_manager:
+                logger.info("Stopping agent sessions in project manager...")
+                # Assuming cancel_active_session or similar exists. We'll do a hard stop via task queue.
+                if hasattr(app.state.project_manager, "task_queue"):
+                    # Quick drain
+                    while not app.state.project_manager.task_queue.empty():
+                        app.state.project_manager.task_queue.get_nowait()
+                if hasattr(app.state.project_manager, "cancel_active_session"):
+                    app.state.project_manager.cancel_active_session()
+        except Exception as e:
+            logger.error(f"Error stopping agents: {e}")
+            
+        # 2. Stop scheduler
+        try:
+            if hasattr(app.state, "scheduler") and app.state.scheduler:
+                logger.info("Stopping scheduler...")
+                app.state.scheduler.shutdown()
+        except Exception as e:
+            logger.error(f"Error stopping scheduler: {e}")
+
+        # 3. Close database connections
+        try:
+            if hasattr(app.state, "db_pool") and app.state.db_pool:
+                logger.info("Closing database connections...")
+                app.state.db_pool.close()
+        except Exception as e:
+            logger.error(f"Error closing DB: {e}")
+
+        # 4. Clean up Lockfile
+        try:
+            from pathlib import Path
+            logger.info("Cleaning up lockfile...")
+            lock_path = Path(LOCK_FILE)
+            if lock_path.exists():
+                lock_path.unlink()
+        except Exception as e:
+            logger.error(f"Error cleaning lockfile: {e}")
+
+        # Q3 Fix: Ensure HTTP response flushes to browser before port closes
+        time.sleep(1.5)
+        
+        logger.info("Initiating Uvicorn shutdown sequence...")
+        
+        # Q1/Q2 Fix: Use explicit server reference instead of gc.get_objects() or Windows SIGTERM
+        if hasattr(app.state, "server") and app.state.server:
+            app.state.server.should_exit = True
+            return
+            
+        logger.warning("Uvicorn server explicit reference not found, falling back to sys.exit.")
+        import sys
+        os._exit(0)
+            
+    threading.Thread(target=_shutdown, daemon=True).start()
+    return {"status": "success", "message": "Initiating graceful shutdown"}
+
+@app.exception_handler(404)
+async def fallback_to_index(request, exc):
+    return FileResponse(STATIC_DIR / "index.html")

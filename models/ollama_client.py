@@ -3,6 +3,14 @@ Low-level Ollama HTTP client.
 
 All LLM communication with Ollama flows through this module. No other module
 should import httpx for LLM calls directly.
+
+Two transport modes:
+  - generate() / stream()      → /api/generate  (raw completion — for background tasks)
+  - chat() / chat_stream()     → /api/chat       (messages API — for all conversational tasks)
+
+The chat API is used for all user-facing conversations because it sends the
+system prompt as a separate structured role, preventing the model from seeing
+or echoing internal XML prompt wrappers like <system>, <identity>, <memories>.
 """
 
 import logging
@@ -128,6 +136,127 @@ class OllamaClient:
                                     think_buffer = rest
                                     in_think = True
                                     # Check if block also closes in same token
+                                    if "</think>" in think_buffer:
+                                        after = think_buffer.split("</think>", 1)[1]
+                                        think_buffer = ""
+                                        in_think = False
+                                        if after:
+                                            yield after
+                                else:
+                                    yield token
+                        if data.get("done", False):
+                            return
+                    except json.JSONDecodeError:
+                        pass
+
+    # ------------------------------------------------------------------
+    # Chat API (messages format) — used for conversational tasks
+    # ------------------------------------------------------------------
+    async def chat(
+        self,
+        model: str,
+        messages: list,
+        options: Optional[Dict[str, Any]] = None,
+        keep_alive: Optional[str] = None,
+    ) -> str:
+        """Non-streaming chat generation using /api/chat (messages API).
+
+        Args:
+            model:    Ollama model name.
+            messages: List of {"role": "system"|"user"|"assistant", "content": str}.
+            options:  Optional Ollama model parameters.
+        Returns:
+            The assistant's response text.
+        """
+        payload: Dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "stream": False,
+        }
+        if options:
+            payload["options"] = options
+        if keep_alive is not None:
+            payload["keep_alive"] = keep_alive
+
+        async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
+            resp = await client.post(
+                f"{self.base_url}/api/chat",
+                json=payload,
+            )
+            if resp.status_code != 200:
+                body = resp.text
+                logger.error("Ollama chat error %s: %s", resp.status_code, body)
+                raise RuntimeError(f"Ollama /api/chat returned {resp.status_code}: {body}")
+
+            data = resp.json()
+            return data.get("message", {}).get("content", "")
+
+    async def chat_stream(
+        self,
+        model: str,
+        messages: list,
+        options: Optional[Dict[str, Any]] = None,
+        keep_alive: Optional[str] = None,
+    ) -> AsyncGenerator[str, None]:
+        """Streaming chat generation using /api/chat (messages API).
+
+        Yields content tokens one-by-one. <think>...</think> blocks emitted
+        by reasoning models are buffered and stripped before yielding.
+
+        Args:
+            model:    Ollama model name.
+            messages: List of {"role": "system"|"user"|"assistant", "content": str}.
+            options:  Optional Ollama model parameters.
+        Yields:
+            Individual text tokens from the assistant response.
+        """
+        payload: Dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "stream": True,
+        }
+        if options:
+            payload["options"] = options
+        if keep_alive is not None:
+            payload["keep_alive"] = keep_alive
+
+        async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
+            async with client.stream(
+                "POST",
+                f"{self.base_url}/api/chat",
+                json=payload,
+            ) as response:
+                if response.status_code != 200:
+                    error_text = await response.aread()
+                    logger.error("Ollama chat_stream error %s: %s", response.status_code, error_text)
+                    raise RuntimeError(f"Ollama /api/chat returned {response.status_code}")
+
+                # Buffer to detect and strip <think>...</think> blocks
+                think_buffer = ""
+                in_think = False
+
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line)
+                        token = data.get("message", {}).get("content", "")
+                        if token:
+                            if in_think:
+                                think_buffer += token
+                                if "</think>" in think_buffer:
+                                    after = think_buffer.split("</think>", 1)[1]
+                                    think_buffer = ""
+                                    in_think = False
+                                    if after:
+                                        yield after
+                            else:
+                                if "<think>" in token:
+                                    before, rest = token.split("<think>", 1)
+                                    if before:
+                                        yield before
+                                    think_buffer = rest
+                                    in_think = True
                                     if "</think>" in think_buffer:
                                         after = think_buffer.split("</think>", 1)[1]
                                         think_buffer = ""

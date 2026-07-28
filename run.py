@@ -39,6 +39,8 @@ if sys.stderr is None:
 #   4. Route all READS of bundled assets to sys._MEIPASS (_internal/).
 # ══════════════════════════════════════════════════════════════════════════════
 
+import traceback
+
 FROZEN = getattr(sys, "frozen", False)
 
 # User-writable application data directory (guaranteed writable on any Windows)
@@ -246,12 +248,19 @@ def main() -> None:
 
     try:
         threading.Thread(target=launch_browser, daemon=True).start()
-        uvicorn.run(
-            "api.server:app",
+        
+        # Q1/Q2 Fix: Explicit server reference rather than GC hunting
+        from api.server import app
+        config = uvicorn.Config(
+            app=app,
             host="127.0.0.1",
             port=PORT,
             log_level="info",
         )
+        server = uvicorn.Server(config)
+        app.state.server = server
+        
+        server.run()
     except KeyboardInterrupt:
         logger.info("ALOY shutting down gracefully.")
     except Exception as e:

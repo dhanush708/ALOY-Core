@@ -275,7 +275,10 @@ async def get_system_health(request: Request):
             "size_gb": spec["size_gb"],
             "description": spec["description"],
             "ok": is_ok,
-            "installed_name": installed_name
+            "installed_name": installed_name,
+            "install_cmd": f"ollama pull {spec['name']}",
+            "impact": "Required for ALOY autonomous operations" if spec["required"] else "Optional enhancement",
+            "purpose": "Local LLM Execution"
         }
         
         if spec["required"]:
@@ -365,16 +368,45 @@ async def get_system_health(request: Request):
     # Warn but don't block if GPU not found or low VRAM
     gpu_ok = True  # Warn only (optional warning)
     
-    # 7. SQLite-Vec Extension Check
+    # 7. Software Dependencies Check
+    software_dependencies = []
+    
+    # Check sqlite-vec
     sqlite_vec_ok = False
-    sqlite_vec_message = "sqlite-vec extension module not found"
     try:
         from database.connection import HAS_VEC
         if HAS_VEC:
             sqlite_vec_ok = True
-            sqlite_vec_message = "sqlite-vec extension loaded successfully"
-    except Exception as e:
-        sqlite_vec_message = f"Check failed: {str(e)}"
+    except Exception:
+        pass
+        
+    software_dependencies.append({
+        "name": "sqlite-vec",
+        "purpose": "Vector Embeddings & Semantic Search",
+        "required": True,
+        "ok": sqlite_vec_ok,
+        "impact": "Core functionality for RAG and semantic retrieval will fail.",
+        "install_cmd": "pip install sqlite-vec"
+    })
+    
+    # Check email-validator (cause of earlier startup crash)
+    email_validator_ok = False
+    try:
+        import email_validator
+        email_validator_ok = True
+    except ImportError:
+        pass
+        
+    software_dependencies.append({
+        "name": "email-validator",
+        "purpose": "Pydantic EmailStr Validation",
+        "required": True,
+        "ok": email_validator_ok,
+        "impact": "Pydantic V2 will crash during model initialization without this.",
+        "install_cmd": "pip install email-validator"
+    })
+    
+    all_required_software_ok = all(dep["ok"] for dep in software_dependencies if dep["required"])
 
     # 8. Internet Connection Check
     now = time.time()
@@ -395,13 +427,13 @@ async def get_system_health(request: Request):
 
 
     health_status = {
-        "status": "healthy" if (db_ok and ollama_ok and all_required_installed and workspace_ok) else "unhealthy",
-        "version": "1.0.0",
-        "latest_version": "1.0.0",
+        "status": "healthy" if (db_ok and ollama_ok and all_required_installed and workspace_ok and all_required_software_ok) else "unhealthy",
+        "version": "1.0.1",
+        "latest_version": "1.0.1",
         "update_status": "Up to date",
         "unexpected_exit": unexpected_exit,
         "database": {"ok": db_ok, "message": "SQLite active in WAL mode" if db_ok else "Database pool offline"},
-        "sqlite_vec": {"ok": sqlite_vec_ok, "message": sqlite_vec_message},
+        "software_dependencies": software_dependencies,
         "internet": {"ok": internet_ok, "message": internet_message},
         "workspace": {
             "ok": workspace_ok,

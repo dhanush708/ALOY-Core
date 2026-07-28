@@ -39,6 +39,10 @@ async def sse_stream_handler(
         # Save assistant's response to history with full search metadata
         full_response = "".join(final_text)
         if full_response:
+            # Final sanitization pass: strip any leaked prompt headers from the saved response
+            from identity.integrity import PromptIntegrityFilter
+            full_response = PromptIntegrityFilter().sanitize_response_start(full_response)
+        if full_response:
             try:
                 metadata = {"search_status": search_status}
                 # Persist source metadata for follow-up continuity and UI badge display
@@ -79,6 +83,10 @@ async def sse_stream_handler(
             
             # Save the assistant response with full search metadata
             full_response = "".join(final_text)
+            if full_response:
+                # Final sanitization pass: strip any leaked prompt headers from the saved response
+                from identity.integrity import PromptIntegrityFilter
+                full_response = PromptIntegrityFilter().sanitize_response_start(full_response)
             if full_response:
                 try:
                     metadata = {}

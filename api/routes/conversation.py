@@ -44,7 +44,7 @@ async def send_message(conv_id: str, payload: MessageRequest, request: Request):
     
     import asyncio
     queue = asyncio.Queue()
-    task = asyncio.create_task(engine.process_message(conv_id, payload.content, event_queue=queue))
+    task = asyncio.create_task(engine.process_message(conv_id, payload.content, event_queue=queue, override=payload.override))
     
     return StreamingResponse(
         sse_stream_handler(task, engine, conv_id, queue=queue),

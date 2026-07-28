@@ -1,4 +1,5 @@
 import logging
+import collections
 from typing import Dict
 
 logger = logging.getLogger(__name__)
@@ -17,19 +18,33 @@ class TokenBudgetManager:
             self._has_tiktoken = False
             logger.debug("Tiktoken not available. Using character-based token estimation.")
             
+        self._token_cache = collections.OrderedDict()
+        self._max_cache_size = 1024
+            
     def count_tokens(self, text: str, model: str = None) -> int:
         """Count tokens for a given text."""
         if not text:
             return 0
             
+        if text in self._token_cache:
+            self._token_cache.move_to_end(text)
+            return self._token_cache[text]
+            
         if self._has_tiktoken:
             try:
-                return len(self._tokenizer.encode(text))
+                tokens = len(self._tokenizer.encode(text))
             except Exception as e:
                 logger.warning(f"Tiktoken encode failed, falling back to estimation: {e}")
-                
-        # Fallback: roughly 4 chars per token
-        return max(1, int(len(text) / 4.0))
+                tokens = max(1, int(len(text) / 4.0))
+        else:
+            # Fallback: roughly 4 chars per token
+            tokens = max(1, int(len(text) / 4.0))
+            
+        self._token_cache[text] = tokens
+        if len(self._token_cache) > self._max_cache_size:
+            self._token_cache.popitem(last=False)
+            
+        return tokens
         
     def allocate_budget(self, total_budget: int, sections: Dict[str, int]) -> Dict[str, int]:
         """Allocate token budget across sections proportionally if sum exceeds total."""
