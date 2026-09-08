@@ -38,41 +38,27 @@ if sys.stderr is None:
 #   3. Route all WRITES to %APPDATA%\ALOY\ (guaranteed writable, per-user).
 #   4. Route all READS of bundled assets to sys._MEIPASS (_internal/).
 # ══════════════════════════════════════════════════════════════════════════════
+# PATH BOOTSTRAP — Centralized Runtime Environment & Path Management
+# ══════════════════════════════════════════════════════════════════════════════
 
-import traceback
+from kernel.path_manager import paths
 
-FROZEN = getattr(sys, "frozen", False)
+FROZEN = paths.is_frozen
+APP_DATA_DIR = paths.app_data_root
+LOG_DIR = paths.logs_dir
+DATA_DIR = paths.data_dir
 
-# User-writable application data directory (guaranteed writable on any Windows)
-APP_DATA_DIR = Path(os.environ.get("APPDATA", Path.home())) / "ALOY"
-LOG_DIR  = APP_DATA_DIR / "logs"
-DATA_DIR = APP_DATA_DIR / "data"
-
-# Create required write directories immediately — before any other code runs
-try:
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-except Exception:
-    pass  # If this fails we're in serious trouble; error dialog will catch it later
+# Safely create required user AppData directories
+paths.ensure_directories()
 
 if FROZEN:
-    # Fix 1: Set CWD to the install directory (where ALOY.exe lives)
-    # sys.executable = C:\Program Files\ALOY\ALOY.exe
-    # .parent        = C:\Program Files\ALOY\
-    install_dir = Path(sys.executable).parent
-    os.chdir(install_dir)
-
-    # Fix 2: Redirect tiktoken to bundled offline cache
-    bundle_dir = Path(sys._MEIPASS)
-    os.environ["TIKTOKEN_CACHE_DIR"] = str(bundle_dir / "assets" / "tiktoken_cache")
-
-    # Expose bundle dir for other modules to read
-    os.environ["ALOY_BUNDLE_DIR"]   = str(bundle_dir)
-    os.environ["ALOY_DATA_DIR"]     = str(DATA_DIR)
-    os.environ["ALOY_LOG_DIR"]      = str(LOG_DIR)
+    os.chdir(paths.app_root)
+    os.environ["TIKTOKEN_CACHE_DIR"] = str(paths.tiktoken_cache_dir)
+    os.environ["ALOY_BUNDLE_DIR"] = str(paths.resource_root)
+    os.environ["ALOY_DATA_DIR"] = str(DATA_DIR)
+    os.environ["ALOY_LOG_DIR"] = str(LOG_DIR)
 else:
-    # Development mode — source tree layout
-    bundle_dir = Path(__file__).parent
+    bundle_dir = paths.app_root
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -110,7 +96,7 @@ def check_port_available(port: int) -> bool:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# IMPORT PHASE
+# IMPORT & PRE-FLIGHT VALIDATION PHASE
 # ══════════════════════════════════════════════════════════════════════════════
 
 try:
@@ -121,35 +107,16 @@ try:
     import time
     import httpx
 
-    # Build log handlers — always write to file; stdout only in dev mode
-    _handlers: list = []
-    try:
-        _file_handler = logging.FileHandler(
-            str(LOG_DIR / "app.log"), encoding="utf-8"
-        )
-        _file_handler.setFormatter(
-            logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-        )
-        _handlers.append(_file_handler)
-    except Exception:
-        pass
+    # Validate runtime environment & pre-flight resources
+    is_env_valid, env_errors = paths.validate_environment()
+    if not is_env_valid:
+        error_details = "\n".join(f"• {err}" for err in env_errors)
+        log_startup_error(f"Environment Validation Failed:\n{error_details}")
+        show_error_dialog("ALOY Environment Error", f"Startup environmental checks failed:\n\n{error_details}")
+        sys.exit(1)
 
-    if not FROZEN:
-        # In dev mode also log to stdout
-        _handlers.append(logging.StreamHandler(sys.stdout))
-
-    if _handlers:
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-            handlers=_handlers,
-        )
-    else:
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        )
-
+    # Initialize log rotation via PathManager (10MB max, 5 backups)
+    paths.setup_logging(log_filename="app.log")
     logger = logging.getLogger("aloy.run")
 
 except Exception as e:
@@ -174,7 +141,7 @@ def main() -> None:
     logger.info("=" * 60)
     logger.info("ALOY v1.0.0 — Starting up")
     if FROZEN:
-        logger.info(f"Install dir : {Path(sys.executable).parent}")
+        logger.info(f"Install dir : {paths.app_root}")
     logger.info(f"Data dir    : {DATA_DIR}")
     logger.info(f"Log dir     : {LOG_DIR}")
     logger.info("=" * 60)

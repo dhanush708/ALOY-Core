@@ -72,7 +72,12 @@ class DebugAgent(BaseAgent):
             return TaskResult(
                 success=True,
                 result=f"Debug Analysis:\n{analysis}",
-                metadata={"root_cause": "Identified in summary"},
+                metadata={
+                    "root_cause": "Identified in summary",
+                    "failed_task_id": task.metadata.get("failed_task_id"),
+                    "failed_agent": task.metadata.get("failed_agent"),
+                    "failed_title": task.metadata.get("failed_title"),
+                },
             )
         except Exception as e:
             logger.error("Debug Agent failed: %s", e)

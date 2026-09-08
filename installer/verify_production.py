@@ -1,143 +1,95 @@
+"""
+Production Verification Script for ALOY Executable & Bundle (Phase 3).
+Verifies executable existence, bundled static UI files, icon assets, tiktoken tokenizer cache,
+sqlite-vec extension, and runtime path resolutions.
+"""
+
 import sys
 import os
 import sqlite3
-import httpx
 import logging
 from pathlib import Path
 
-# Setup logging
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger("production_verifier")
 
-def check_sqlite() -> bool:
-    try:
-        conn = sqlite3.connect(":memory:")
-        cursor = conn.cursor()
-        cursor.execute("SELECT sqlite_version()")
-        ver = cursor.fetchone()[0]
-        logger.info(f"SQLite loaded successfully. Version: {ver}")
-        conn.close()
-        return True
-    except Exception as e:
-        logger.error(f"SQLite check failed: {e}")
+
+def check_bundled_executable(dist_dir: Path) -> bool:
+    exe_path = dist_dir / "ALOY.exe"
+    if not exe_path.exists():
+        logger.error(f"Executable missing: {exe_path}")
+        return False
+    logger.info(f"Verified executable: {exe_path} ({exe_path.stat().st_size / (1024*1024):.2f} MB)")
+    return True
+
+
+def check_bundled_resources(dist_dir: Path) -> bool:
+    internal_dir = dist_dir / "_internal"
+    if not internal_dir.exists():
+        # Direct bundle folder
+        internal_dir = dist_dir
+
+    required_assets = [
+        internal_dir / "static" / "index.html",
+        internal_dir / "static" / "js" / "app.js",
+        internal_dir / "static" / "css" / "style.css",
+        internal_dir / "assets" / "icons" / "aloy.ico",
+        internal_dir / "assets" / "tiktoken_cache",
+    ]
+
+    missing = [str(p) for p in required_assets if not p.exists()]
+    if missing:
+        logger.error(f"Missing bundled resources: {missing}")
         return False
 
-def check_sqlite_vec() -> bool:
+    logger.info("All required bundled resources verified successfully in dist/ALOY/_internal/")
+    return True
+
+
+def check_sqlite_vec_loading() -> bool:
     try:
         import sqlite_vec
         conn = sqlite3.connect(":memory:")
         conn.enable_load_extension(True)
         sqlite_vec.load(conn)
-        
-        # Test vector extension
         cursor = conn.cursor()
         cursor.execute("SELECT vec_version()")
         ver = cursor.fetchone()[0]
-        logger.info(f"sqlite-vec loaded successfully. Version: {ver}")
-        
-        # Test simple distance calculation
-        cursor.execute("SELECT vec_distance_l2(?, ?)", (sqlite_vec.serialize_float32([1.0, 2.0]), sqlite_vec.serialize_float32([1.0, 3.0])))
-        dist = cursor.fetchone()[0]
-        logger.info(f"sqlite-vec distance calculation verified. L2 distance = {dist}")
-        
+        logger.info(f"Verified sqlite-vec extension in bundle context. Version: {ver}")
         conn.close()
         return True
     except Exception as e:
         logger.error(f"sqlite-vec check failed: {e}")
         return False
 
-async def check_ollama() -> bool:
-    url = "http://localhost:11434/api/tags"
-    try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            resp = await client.get(url)
-            if resp.status_code == 200:
-                models = [m["name"] for m in resp.json().get("models", [])]
-                logger.info(f"Ollama detected successfully. Available local models: {models}")
-                return True
-            else:
-                logger.warning(f"Ollama returned status code {resp.status_code}")
-                return False
-    except Exception as e:
-        logger.warning(f"Ollama server not reachable at http://localhost:11434. Ensure Ollama is running: {e}")
-        return False
 
-async def check_migrations() -> bool:
-    # Set PYTHONPATH
-    sys.path.insert(0, str(Path(__file__).parent.parent))
-    try:
-        from database.connection import DatabaseConnectionPool
-        from database.migrator import Migrator
-        
-        db_path = "data/test_verify.db"
-        if os.path.exists(db_path):
-            os.remove(db_path)
-            
-        # Ensure data folder exists
-        os.makedirs("data", exist_ok=True)
-            
-        db_pool = DatabaseConnectionPool(db_path)
-        await db_pool.start()
-        
-        migrator = Migrator(db_pool)
-        await migrator.migrate()
-        logger.info("Database migrations successfully verified on clean DB state.")
-        
-        await db_pool.stop()
-        if os.path.exists(db_path):
-            os.remove(db_path)
+def verify_build(dist_path: str = "dist/ALOY") -> bool:
+    logger.info("=========================================")
+    logger.info("Starting ALOY Executable Bundle Verification")
+    logger.info("=========================================")
+
+    dist_dir = Path(dist_path).resolve()
+    
+    e_ok = check_bundled_executable(dist_dir)
+    r_ok = check_bundled_resources(dist_dir)
+    s_ok = check_sqlite_vec_loading()
+
+    logger.info("=========================================")
+    logger.info("BUILD VERIFICATION SUMMARY:")
+    logger.info(f"  Executable Check:   {'PASS' if e_ok else 'FAIL'}")
+    logger.info(f"  Bundled Assets:     {'PASS' if r_ok else 'FAIL'}")
+    logger.info(f"  sqlite-vec DLL:     {'PASS' if s_ok else 'FAIL'}")
+    logger.info("=========================================")
+
+    if e_ok and r_ok and s_ok:
+        logger.info("BUILD VERIFICATION SUCCESSFUL. READY FOR INSTALLER PACKAGING.")
         return True
-    except Exception as e:
-        logger.error(f"Database migration verification failed: {e}")
+    else:
+        logger.error("BUILD VERIFICATION FAILED. Check missing resources above.")
         return False
 
-def check_first_run_files() -> bool:
-    root = Path(__file__).parent.parent
-    required_paths = [
-        root / "config" / "default.yaml",
-        root / "static" / "index.html",
-        root / "static" / "js" / "app.js",
-        root / "static" / "css" / "style.css",
-    ]
-    missing = []
-    for p in required_paths:
-        if not p.exists():
-            missing.append(str(p))
-            
-    if missing:
-        logger.error(f"Missing required distribution files: {missing}")
-        return False
-    else:
-        logger.info("All required distribution files present and verified.")
-        return True
-
-async def main():
-    logger.info("=========================================")
-    logger.info("Starting ALOY Production Verification Suite")
-    logger.info("=========================================")
-    
-    sq_ok = check_sqlite()
-    sv_ok = check_sqlite_vec()
-    ol_ok = await check_ollama()
-    mg_ok = await check_migrations()
-    fr_ok = check_first_run_files()
-    
-    logger.info("=========================================")
-    logger.info("VERIFICATION SUMMARY:")
-    logger.info(f"SQLite Loading:            {'PASS' if sq_ok else 'FAIL'}")
-    logger.info(f"sqlite-vec Extension:      {'PASS' if sv_ok else 'FAIL'}")
-    logger.info(f"Ollama Detection:          {'PASS' if ol_ok else 'WARNING (Ensure Ollama is running)'}")
-    logger.info(f"Database Migrations:       {'PASS' if mg_ok else 'FAIL'}")
-    logger.info(f"First-Run Assets:          {'PASS' if fr_ok else 'FAIL'}")
-    logger.info("=========================================")
-    
-    if all([sq_ok, sv_ok, mg_ok, fr_ok]):
-        logger.info("SYSTEM PRODUCTION READY FOR RELEASE.")
-        sys.exit(0)
-    else:
-        logger.error("SYSTEM NOT READY FOR RELEASE. Please fix errors above.")
-        sys.exit(1)
 
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+    target = sys.argv[1] if len(sys.argv) > 1 else "dist/ALOY"
+    success = verify_build(target)
+    sys.exit(0 if success else 1)

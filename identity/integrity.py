@@ -42,11 +42,18 @@ class PromptIntegrityFilter:
         re.compile(r"^CURRENT WORKSPACE.*$", re.IGNORECASE | re.MULTILINE),
         re.compile(r"^PERSONALITY STYLES.*$", re.IGNORECASE | re.MULTILINE),
         re.compile(r"^Previous conversations:.*$", re.IGNORECASE | re.MULTILINE),
+        re.compile(r"^-+\s*(End of.*instructions|Updated instructions|Revised instructions).*$", re.IGNORECASE | re.MULTILINE),
+        re.compile(r"^\s*\((?:End of conversation|End of instructions|Response complete|Rules applied).*?\)\s*$", re.IGNORECASE | re.MULTILINE),
+        re.compile(r"^\s*\[?(FACTS ABOUT THE USER|PROJECT CONTEXT|CONVERSATION SUMMARY|Context Information)\]?\s*", re.IGNORECASE | re.MULTILINE),
     ]
 
-    # Patterns that indicate a response has leaked prompt content at its start
-    _RESPONSE_START_LEAK_RE = re.compile(
-        r"^\s*(System:|Rules:|Context:|Personal Info:|Knowledge Router:|Documentation Intelligence Tool:|ALOY:|Assistant:|ABSOLUTE RULES|CURRENT SYSTEM CAPABILITIES|PERSONALITY STYLES|Previous conversations:)",
+    _INLINE_ROLE_PREFIX_RE = re.compile(
+        r"^\s*(System:|Assistant:|ALOY:|Rules:|Context:|Personal Info:)\s*",
+        re.IGNORECASE
+    )
+
+    _FULL_LINE_LEAK_RE = re.compile(
+        r"^\s*(\(End of|\(Response|ABSOLUTE RULES|CURRENT SYSTEM CAPABILITIES|CURRENT WORKSPACE|PERSONALITY STYLES|Previous conversations:|--+\s*End of|--+\s*Updated|--+\s*Revised|\[?FACTS ABOUT THE USER|\[?PROJECT CONTEXT|\[?CONVERSATION SUMMARY).*$",
         re.IGNORECASE
     )
 
@@ -85,12 +92,17 @@ class PromptIntegrityFilter:
         """Strips leaked prompt-header prefixes from the very start of a complete response.
 
         This is the last-resort guard: if the model echoed a prompt-section header
-        as the first line of its response, remove it and trim leading whitespace.
+        or inline role prefix, remove it and trim leading whitespace.
         """
         lines = text.split("\n")
-        # Drop leading lines that match known prompt leak patterns
-        while lines and self._RESPONSE_START_LEAK_RE.match(lines[0]):
+        # 1. Drop leading lines that are full section headers or delimiters
+        while lines and self._FULL_LINE_LEAK_RE.match(lines[0]):
             lines.pop(0)
+
+        # 2. If the first remaining line starts with an inline prefix (e.g. "Assistant: Hello"), strip only the prefix
+        if lines:
+            lines[0] = self._INLINE_ROLE_PREFIX_RE.sub("", lines[0])
+
         cleaned = "\n".join(lines).lstrip()
         # Apply full clean_text as well
         return self.clean_text(cleaned)

@@ -98,14 +98,15 @@ Testing Framework: {testing_framework}
 Available Worker Agents:
 - architect: Inspects workspace structure, defines files and module boundaries.
 - coder: Modifies or creates code files.
-- tester: Runs tests and checks test logs.
+- tester: Generates unit/integration tests and executes test suites.
 - documenter: Generates documentation (changelogs, readmes, APIs).
 
 Rules for task generation:
 1. Every task must have a unique 'id' (e.g. 'arch_1', 'code_1', 'test_1', 'doc_1').
 2. Tasks should have 'depends_on' as a list of other task 'id's.
 3. Order tasks so that dependencies are resolved sequentially.
-4. Output must be a strict JSON list of objects. No additional text, markdown, or commentary.
+4. If a plan contains tasks for writing tests and running tests, the test execution task MUST depend on the test creation task so tests are created before they are run.
+5. Output must be a strict JSON list of objects. No additional text, markdown, or commentary.
 
 Example output:
 [
@@ -135,6 +136,28 @@ Respond with only the JSON list:"""
             for t in parsed_plan:
                 if not all(k in t for k in ("id", "assigned_agent", "title", "description", "depends_on")):
                     raise ValueError(f"Task format is missing key fields in: {t}")
+
+            # Enforce that test execution tasks depend on test creation tasks
+            creation_tasks = []
+            execution_tasks = []
+            for t in parsed_plan:
+                text = f"{t.get('title', '')} {t.get('description', '')}".lower()
+                agent = t.get("assigned_agent")
+                if agent in ("tester", "coder"):
+                    is_create = any(kw in text for kw in ("write test", "create test", "generate test", "develop test", "add test"))
+                    is_run = any(kw in text for kw in ("run test", "execute test", "run pytest"))
+                    if is_create and not is_run:
+                        creation_tasks.append(t)
+                    elif is_run and not is_create:
+                        execution_tasks.append(t)
+
+            for exec_task in execution_tasks:
+                deps = list(exec_task.get("depends_on") or [])
+                for create_task in creation_tasks:
+                    c_id = create_task.get("id")
+                    if c_id and c_id != exec_task.get("id") and c_id not in deps:
+                        deps.append(c_id)
+                exec_task["depends_on"] = deps
 
             return TaskResult(
                 success=True,

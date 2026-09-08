@@ -72,7 +72,7 @@ class TestSearchPipelineV2:
         assert ctx.results_count == 1
         assert ctx.intent.requires_search is True
         assert ctx.plan is not None
-        assert "[LIVE INTERNET SEARCH RESULTS]" in ctx.formatted_block
+        assert "[Context Information]" in ctx.formatted_block
         assert "https://docs.python.org/3.14/" in ctx.formatted_block
 
     @pytest.mark.asyncio

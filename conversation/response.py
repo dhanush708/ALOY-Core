@@ -33,13 +33,21 @@ class ResponseGenerationStage(PipelineStage):
             integrity_filter = PromptIntegrityFilter()
 
             try:
-                # We yield the meta event if not already done
-                if search_triggered and search_succeeded:
-                    search_status = "success"
-                elif search_triggered:
-                    search_status = "failed"
-                else:
+                # Calculate accurate search_status state machine value
+                search_triggered = getattr(context, "search_triggered", False)
+                search_succeeded = getattr(context, "search_succeeded", False)
+                result_count = getattr(context, "search_result_count", 0)
+                failure_reason = getattr(context, "search_failure_reason", "")
+
+                if not search_triggered:
                     search_status = "local"
+                elif search_succeeded and result_count > 0:
+                    search_status = "success"
+                elif failure_reason == "no_results" or (search_succeeded and result_count == 0):
+                    search_status = "no_results"
+                else:
+                    search_status = "failed"
+
                 context.event_queue.put_nowait({
                     "type": "meta",
                     "intent": context.intent or "simple_chat",
@@ -137,11 +145,20 @@ class ResponseGenerationStage(PipelineStage):
             async def stream_generator() -> AsyncGenerator[str, None]:
                 full_response: list[str] = []
                 try:
-                    async for token in router.stream(
-                        task=context.intent or "simple_chat",
-                        prompt=context.full_prompt,
-                        conversation_id=context.state.id,
-                    ):
+                    use_chat_api = bool(context.messages)
+                    if use_chat_api:
+                        token_stream = router.stream_chat(
+                            task=context.intent or "simple_chat",
+                            messages=context.messages,
+                            conversation_id=context.state.id,
+                        )
+                    else:
+                        token_stream = router.stream(
+                            task=context.intent or "simple_chat",
+                            prompt=context.full_prompt,
+                            conversation_id=context.state.id,
+                        )
+                    async for token in token_stream:
                         full_response.append(token)
                         yield token
                 except Exception as e:

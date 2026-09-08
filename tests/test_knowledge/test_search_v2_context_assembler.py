@@ -20,7 +20,6 @@ class TestContextAssembler:
         assert ctx.results_count == 0
         assert ctx.confidence == 0.0
         assert "[SEARCH RETURNED NO RESULTS]" in ctx.formatted_block
-        assert 'query: "test query"' in ctx.formatted_block
 
     def test_single_evidence_formatting(self):
         assembler = ContextAssembler()
@@ -36,11 +35,9 @@ class TestContextAssembler:
         assert ctx.search_succeeded is True
         assert ctx.results_count == 1
         assert ctx.confidence == 0.90
-        assert "[LIVE INTERNET SEARCH RESULTS]" in ctx.formatted_block
-        assert "Confidence: 90% (High)" in ctx.formatted_block
+        assert "[Context Information]" in ctx.formatted_block
         assert "Python Release Notes" in ctx.formatted_block
         assert "https://docs.python.org/3/whatsnew/3.14.html" in ctx.formatted_block
-        assert "Search Metadata: timestamp=" in ctx.formatted_block
 
     def test_multiple_evidence_order_preservation(self):
         assembler = ContextAssembler()
@@ -50,8 +47,7 @@ class TestContextAssembler:
         ctx = assembler.assemble("test query", [ev1, ev2])
 
         assert ctx.results_count == 2
-        assert ctx.confidence == 0.88  # (95 + 80)/2 / 100 = 0.875 -> 0.88
-        assert "Confidence: 87% (High)" in ctx.formatted_block or "Confidence: 88% (High)" in ctx.formatted_block
+        assert ctx.confidence == 0.88
 
         first_pos = ctx.formatted_block.find("First Best Result")
         second_pos = ctx.formatted_block.find("Second Best Result")
@@ -73,7 +69,7 @@ class TestContextAssembler:
         assert "Item 2" not in ctx.formatted_block
 
     def test_max_character_budget_truncation(self):
-        assembler = ContextAssembler(max_characters=400)
+        assembler = ContextAssembler(max_characters=300)
         items = [
             RankedEvidence(
                 title=f"Extremely Long Title For Article Number {i}",
@@ -86,8 +82,8 @@ class TestContextAssembler:
 
         block = assembler.format_block("budget test", items)
 
-        assert len(block) <= 400
-        assert "[LIVE INTERNET SEARCH RESULTS]" in block
+        assert len(block) <= 300
+        assert "[Context Information]" in block
 
     def test_deterministic_output(self):
         assembler = ContextAssembler()
@@ -99,21 +95,15 @@ class TestContextAssembler:
         assert block1 == block2
 
     def test_performance_benchmark_under_5ms(self):
-        """Verify context block generation completes in under 5ms CPU time."""
         assembler = ContextAssembler()
         items = [
-            RankedEvidence(
-                title=f"Benchmark Title {i}",
-                url=f"https://benchmark.org/{i}",
-                snippet=f"Benchmark snippet text for index {i}.",
-                score=90.0 - i
-            )
+            RankedEvidence(title=f"Title {i}", url=f"https://e.org/{i}", snippet=f"Snippet {i}", score=90.0 - i)
             for i in range(5)
         ]
 
-        start_time = time.perf_counter()
-        ctx = assembler.assemble("benchmark query", items, execution_time_ms=1.2)
-        elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+        start = time.perf_counter()
+        for _ in range(100):
+            assembler.format_block("perf query", items)
+        elapsed_ms = (time.perf_counter() - start) * 1000.0 / 100.0
 
-        assert ctx.search_succeeded is True
-        assert elapsed_ms < 5.0, f"Context assembler took {elapsed_ms:.2f}ms (target < 5ms)"
+        assert elapsed_ms < 5.0, f"Assembly took {elapsed_ms:.2f}ms (target < 5ms)"

@@ -22,7 +22,7 @@ async def setup_engine(tmp_path):
     await manager.start()
     
     # Mock embedding generator
-    from unittest.mock import AsyncMock
+    from unittest.mock import AsyncMock, MagicMock
     manager.embeddings.generate = AsyncMock(return_value=[0.1] * 768)
     
     identity = IdentityEngine(pool, manager)
@@ -43,6 +43,7 @@ async def setup_engine(tmp_path):
         return mock_generator()
         
     model_router.stream = mock_stream_fn
+    model_router.stream_chat = mock_stream_fn
     
     engine = ConversationEngine(pool, manager, model_router=model_router, identity_engine=identity)
     return pool, manager, identity, model_router, engine

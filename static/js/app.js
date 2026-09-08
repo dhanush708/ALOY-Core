@@ -593,22 +593,24 @@ document.addEventListener("DOMContentLoaded", () => {
                             activeIntentEl.textContent = data.intent || "simple_chat";
                             updateStatusIndicator("router", "Working", `Loading ${data.model || "model"}...`);
                             
-                            if (data.search_status) {
+                            if (data.search_status && data.search_status !== "local") {
                                 const badgeBox = bubble.querySelector(".knowledge-badges");
-                                badgeBox.style.display = "flex";
                                 let statusText = "";
                                 let statusClass = "";
                                 if (data.search_status === "success") {
                                     statusText = "🌐 Used Live Web Search";
                                     statusClass = "search-success";
+                                } else if (data.search_status === "no_results") {
+                                    statusText = "🔍 No Relevant Web Results";
+                                    statusClass = "search-no-results";
                                 } else if (data.search_status === "failed") {
-                                    statusText = "⚠ Live Search Failed";
+                                    statusText = "⚠️ Search Unavailable";
                                     statusClass = "search-failed";
-                                } else {
-                                    statusText = "🧠 Answered from Local Knowledge";
-                                    statusClass = "search-local";
                                 }
-                                badgeBox.innerHTML = `<span class="badge-source ${statusClass}">${statusText}</span>`;
+                                if (statusText) {
+                                    badgeBox.style.display = "flex";
+                                    badgeBox.innerHTML = `<span class="badge-source ${statusClass}">${statusText}</span>`;
+                                }
                             }
                             break;
                             
@@ -769,22 +771,24 @@ document.addEventListener("DOMContentLoaded", () => {
             const badgeBox = bubble.querySelector(".knowledge-badges");
             let hasBadges = false;
             
-            if (metadata.search_status) {
-                badgeBox.style.display = "flex";
-                hasBadges = true;
+            if (metadata.search_status && metadata.search_status !== "local") {
                 let statusText = "";
                 let statusClass = "";
                 if (metadata.search_status === "success") {
                     statusText = "🌐 Used Live Web Search";
                     statusClass = "search-success";
+                } else if (metadata.search_status === "no_results") {
+                    statusText = "🔍 No Relevant Web Results";
+                    statusClass = "search-no-results";
                 } else if (metadata.search_status === "failed") {
-                    statusText = "⚠ Live Search Failed";
+                    statusText = "⚠️ Search Unavailable";
                     statusClass = "search-failed";
-                } else {
-                    statusText = "🧠 Answered from Local Knowledge";
-                    statusClass = "search-local";
                 }
-                badgeBox.innerHTML += `<span class="badge-source ${statusClass}">${statusText}</span>`;
+                if (statusText) {
+                    badgeBox.style.display = "flex";
+                    hasBadges = true;
+                    badgeBox.innerHTML += `<span class="badge-source ${statusClass}">${statusText}</span>`;
+                }
             }
             
             if (metadata.sources) {

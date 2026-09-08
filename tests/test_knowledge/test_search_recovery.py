@@ -352,8 +352,9 @@ async def test_context_build_stage_search_exception_still_produces_prompt():
     mock_conv_engine.app = mock_app
     stage.conversation_engine = mock_conv_engine
 
-    ctx = ConversationContext(state=state, user_message="What is the latest GPU?")
-    await stage.process(ctx)
+    with patch("knowledge.v2.integration.SearchIntegration.execute_search", side_effect=RuntimeError("provider down")):
+        ctx = ConversationContext(state=state, user_message="What is the latest GPU?")
+        await stage.process(ctx)
 
     assert ctx.full_prompt, "full_prompt must be set even when search raises"
     assert ctx.search_triggered is True
@@ -390,8 +391,20 @@ async def test_context_build_stage_no_results_still_produces_prompt():
     mock_conv_engine.app = mock_app
     stage.conversation_engine = mock_conv_engine
 
-    ctx = ConversationContext(state=state, user_message="Latest crypto prices")
-    await stage.process(ctx)
+    from knowledge.v2.models import SearchContext
+    mock_dto = SearchContext(
+        search_triggered=True,
+        search_succeeded=False,
+        query="Latest crypto prices",
+        results_count=0,
+        formatted_block="[SEARCH RETURNED NO RESULTS]",
+        failure_reason="no_results"
+    )
+
+    with patch("knowledge.v2.integration.SearchIntegration.execute_search", new_callable=AsyncMock) as mock_exec:
+        mock_exec.return_value = mock_dto
+        ctx = ConversationContext(state=state, user_message="Latest crypto prices")
+        await stage.process(ctx)
 
     assert ctx.full_prompt, "full_prompt must be non-empty even when no results returned"
     assert ctx.search_succeeded is False

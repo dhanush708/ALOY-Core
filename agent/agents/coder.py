@@ -10,6 +10,57 @@ from models.router import ModelRouter
 logger = logging.getLogger(__name__)
 
 
+def extract_clean_code(proposal: str, target_path: str = "") -> str:
+    """
+    Extracts clean source code from an LLM response, stripping conversational
+    explanations, Markdown code fences, and surrounding commentary.
+    If the response is already clean code, preserves it.
+    """
+    if not proposal:
+        return ""
+
+    # 1. Search for markdown code fences: ```lang ... ```
+    blocks = re.findall(r"```([a-zA-Z0-9_\-\.]*)\n(.*?)```", proposal, re.DOTALL)
+    if blocks:
+        ext = os.path.splitext(target_path)[1].lower() if target_path else ""
+        target_lang = "python" if ext in (".py", ".pyw") else ""
+        if target_lang:
+            for lang, content in blocks:
+                if lang.lower() in (target_lang, "py"):
+                    return content.strip()
+        candidate_blocks = [content.strip() for lang, content in blocks if content.strip()]
+        if candidate_blocks:
+            for b in candidate_blocks:
+                if any(kw in b for kw in ("def ", "class ", "import ", "from ")):
+                    return b
+            return candidate_blocks[0]
+
+    # 2. If no markdown fences are present, check if there are conversational introductory lines
+    lines = proposal.split("\n")
+    code_start_idx = -1
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if (
+            stripped.startswith(("import ", "from ", "def ", "class ", "if __name__", "@"))
+            or (stripped.startswith("#!") and i == 0)
+        ):
+            code_start_idx = i
+            break
+
+    if code_start_idx > 0:
+        prose_before = "\n".join(lines[:code_start_idx]).lower()
+        if any(phrase in prose_before for phrase in ("here is", "implementation", "to implement", "below is", "code:")):
+            remaining = lines[code_start_idx:]
+            code_lines = []
+            for line in remaining:
+                if line.strip().startswith(("### Explanation", "Explanation:", "This implementation", "In this code", "Note that")):
+                    break
+                code_lines.append(line)
+            return "\n".join(code_lines).strip()
+
+    return proposal.strip()
+
+
 class CodingAgent(BaseAgent):
     """
     Coding Agent writes or modifies code files.
@@ -43,6 +94,7 @@ class CodingAgent(BaseAgent):
         tool_context = {
             "session_id": context.session_id,
             "actor": self.name,
+            "workspace_path": context.workspace_path,
         }
 
         # Retrieve mistake avoidance memory
@@ -111,7 +163,15 @@ class CodingAgent(BaseAgent):
                                 extracted_path = path_candidate
                                 break
 
-            target_path = task.metadata.get("file_path") or extracted_path or "src/implementation.py"
+            goal_match = None
+            for text_src in (task.description, task.title, context.goal):
+                if text_src:
+                    m = re.search(r"\b([a-zA-Z0-9_\-\.\/]+\.py)\b", text_src)
+                    if m:
+                        goal_match = m.group(1).strip()
+                        break
+
+            target_path = task.metadata.get("file_path") or extracted_path or goal_match or "src/implementation.py"
             logger.info("Coding Agent target path resolved to: %s", target_path)
             
             # Formulate full file path
@@ -133,12 +193,13 @@ class CodingAgent(BaseAgent):
                     tool_context,
                 )
             else:
+                clean_content = extract_clean_code(code_proposal, target_path)
                 write_res = await tool_system.execute(
                     "file_editor",
                     {
                         "path": full_path,
                         "action": "write",
-                        "content": code_proposal,
+                        "content": clean_content,
                     },
                     tool_context,
                 )

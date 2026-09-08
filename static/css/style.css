@@ -514,6 +514,12 @@ a {
     border: 1px solid rgba(198, 40, 40, 0.3);
 }
 
+.badge-source.search-no-results {
+    background: rgba(255, 152, 0, 0.15);
+    color: #ffb74d;
+    border: 1px solid rgba(255, 152, 0, 0.3);
+}
+
 .badge-source.search-local {
     background: rgba(25, 118, 210, 0.15);
     color: #64b5f6;

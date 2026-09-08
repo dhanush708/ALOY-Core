@@ -1,3 +1,4 @@
+import os
 import asyncio
 import logging
 import sys
@@ -25,6 +26,11 @@ class RunnerTool(BaseTool):
                         "description": "Specific test file or directory path relative to workspace root.",
                         "default": ""
                     },
+                    "cwd": {
+                        "type": "string",
+                        "description": "Workspace root directory to execute tests in.",
+                        "default": ""
+                    },
                     "options": {
                         "type": "array",
                         "items": {"type": "string"},
@@ -41,9 +47,34 @@ class RunnerTool(BaseTool):
         super().__init__(metadata)
         
     async def execute(self, params: Dict[str, Any], context: Dict[str, Any]) -> str:
+        # Resolve target workspace safely
+        cwd = params.get("cwd") or context.get("workspace_path") or context.get("workspace") or ""
+        if not cwd:
+            return "Error: No workspace directory specified for test execution.\nExit Code: 1"
+            
+        cwd = os.path.abspath(cwd)
+        if not os.path.isdir(cwd):
+            return f"Error: Workspace path does not exist: {cwd}\nExit Code: 1"
+
         path = params.get("path", "")
         options = params.get("options", [])
         
+        # Check test file existence if path provided
+        if path:
+            target_path = path if os.path.isabs(path) else os.path.join(cwd, path)
+            if not os.path.exists(target_path):
+                return f"Error: Test file or directory not found: {path} (resolved to {target_path})\nExit Code: 4"
+        else:
+            # When path is empty, verify test files exist in workspace so we never run blindly on repo root
+            test_files = []
+            for root, dirs, files in os.walk(cwd):
+                dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("__pycache__", "venv", ".venv", "node_modules")]
+                for f in files:
+                    if (f.startswith("test_") or f.endswith("_test.py")) and f.endswith(".py"):
+                        test_files.append(os.path.join(root, f))
+            if not test_files:
+                return f"No test files found in workspace {cwd} (matching test_*.py or *_test.py).\nExit Code: 5"
+
         # Build command: python -m pytest [path] [options...]
         command = [sys.executable, "-m", "pytest"]
         if path:
@@ -52,7 +83,10 @@ class RunnerTool(BaseTool):
         
         is_frozen = getattr(sys, "frozen", False)
         out_temp_path = None
-        env = __import__("os").environ.copy()
+        env = os.environ.copy()
+        existing_pp = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = f"{cwd}{os.pathsep}{existing_pp}" if existing_pp else cwd
+
         if is_frozen:
             import tempfile
             with tempfile.NamedTemporaryFile(suffix=".log", delete=False) as f2:
@@ -65,6 +99,7 @@ class RunnerTool(BaseTool):
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 env=env,
+                cwd=cwd,
                 creationflags=CREATION_FLAGS
             )
             
@@ -94,6 +129,7 @@ class RunnerTool(BaseTool):
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     env=env,
+                    cwd=cwd,
                     creationflags=CREATION_FLAGS
                 )
                 return p.returncode, p.stdout, p.stderr
@@ -107,7 +143,6 @@ class RunnerTool(BaseTool):
                 err = stderr_bytes.decode("utf-8", errors="replace")
         finally:
             if out_temp_path:
-                import os
                 if os.path.exists(out_temp_path):
                     try:
                         os.remove(out_temp_path)

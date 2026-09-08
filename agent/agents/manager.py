@@ -1,6 +1,7 @@
 import logging
 import json
 import asyncio
+import uuid
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 
@@ -18,6 +19,7 @@ from kernel.types import (
     AGENT_SESSION_FAILED,
     AGENT_SESSION_PAUSED,
     AGENT_SESSION_RESUMED,
+    AGENT_STATE_CHANGED,
     TASK_STARTED,
     TASK_COMPLETED,
     TASK_FAILED,
@@ -236,8 +238,27 @@ class ManagerAgent(BaseAgent):
 
             # 5. Success/Failure exit
             all_tasks = await self.task_queue.list_tasks(session_id)
-            has_failed_tasks = any(t.status == TaskStatus.FAILED for t in all_tasks)
-            if has_failed_tasks:
+
+            # Build set of task IDs that were successfully repaired and verified by retest
+            repaired_task_ids = set()
+            for t in all_tasks:
+                if t.metadata.get("is_repair") and t.assigned_agent == "tester" and t.status == TaskStatus.DONE:
+                    rep_id = t.metadata.get("repaired_task_id")
+                    if rep_id:
+                        repaired_task_ids.add(rep_id)
+
+            has_unresolved_failures = False
+            for t in all_tasks:
+                if t.status == TaskStatus.FAILED:
+                    if t.id not in repaired_task_ids:
+                        has_unresolved_failures = True
+                        break
+
+            # If any repair or retest task itself failed, session remains FAILED
+            if any(t.status == TaskStatus.FAILED for t in all_tasks if t.metadata.get("is_repair")):
+                has_unresolved_failures = True
+
+            if has_unresolved_failures:
                 await self._update_session_state(session_id, AgentSessionState.FAILED, error_msg="One or more tasks failed.")
                 await self.event_bus.publish(
                     Event(
@@ -339,6 +360,36 @@ class ManagerAgent(BaseAgent):
                     except Exception as plan_err:
                         logger.warning("Could not store plan details or enqueue tasks: %s", plan_err)
                 
+                if task.assigned_agent == "debugger":
+                    failed_task_id = task.metadata.get("failed_task_id")
+                    failed_title = task.metadata.get("failed_title") or "failed task"
+                    analysis = result.result
+                    
+                    repair_task_id = f"{session_id}_repair_{uuid.uuid4().hex[:6]}"
+                    await self.task_queue.create_task(
+                        session_id=session_id,
+                        assigned_agent="coder",
+                        title=f"Repair implementation for: {failed_title}",
+                        description=f"Apply fixes to resolve the error according to debug analysis:\n{analysis}",
+                        priority=1,
+                        depends_on=[task.id],
+                        metadata={"is_repair": True, "repaired_task_id": failed_task_id},
+                        task_id=repair_task_id,
+                    )
+                    
+                    retest_task_id = f"{session_id}_retest_{uuid.uuid4().hex[:6]}"
+                    await self.task_queue.create_task(
+                        session_id=session_id,
+                        assigned_agent="tester",
+                        title=f"Re-run tests after repair: {failed_title}",
+                        description=f"Execute tests to verify fix for {failed_title}",
+                        priority=1,
+                        depends_on=[repair_task_id],
+                        metadata={"is_repair": True, "repaired_task_id": failed_task_id},
+                        task_id=retest_task_id,
+                    )
+                    logger.info("Debugger recovery enqueued repair task %s and retest task %s", repair_task_id, retest_task_id)
+
                 if task.assigned_agent in ("planner", "coder", "tester"):
                     await self._create_checkpoint(session_id, context)
             else:
@@ -382,18 +433,28 @@ class ManagerAgent(BaseAgent):
             # Cancel all dependent tasks recursively so they don't block
             await self._cancel_dependent_tasks(session_id, task.id)
             
-            if task.assigned_agent in ("coder", "tester"):
-                logger.info("Escalating failure to debug agent...")
-                try:
-                    await self.task_queue.create_task(
-                        session_id=session_id,
-                        assigned_agent="debugger",
-                        title=f"Debug failure of: {task.title}",
-                        description=f"Analyze error: {error_msg}",
-                        priority=2,
-                    )
-                except Exception as e:
-                    logger.error("Failed to create debugger task: %s", e)
+            is_repair = task.metadata.get("is_repair", False)
+            if task.assigned_agent in ("coder", "tester") and not is_repair:
+                existing_tasks = await self.task_queue.list_tasks(session_id)
+                debug_count = sum(1 for t in existing_tasks if t.assigned_agent == "debugger")
+                if debug_count < 2:
+                    logger.info("Escalating failure to debug agent...")
+                    try:
+                        await self.task_queue.create_task(
+                            session_id=session_id,
+                            assigned_agent="debugger",
+                            title=f"Debug failure of: {task.title}",
+                            description=f"Analyze error: {error_msg}",
+                            priority=1,
+                            metadata={
+                                "failed_task_id": task.id,
+                                "failed_agent": task.assigned_agent,
+                                "failed_title": task.title,
+                                "error": error_msg,
+                            },
+                        )
+                    except Exception as e:
+                        logger.error("Failed to create debugger task: %s", e)
 
     async def _cancel_dependent_tasks(self, session_id: str, failed_task_id: str) -> None:
         """Finds all tasks in the session that depend on failed_task_id and cancels them recursively."""

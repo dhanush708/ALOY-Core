@@ -75,109 +75,60 @@ class ContextAssembler:
         timestamp: Optional[str] = None,
         overall_confidence: float = 0.0
     ) -> str:
-        """Generate deterministic prompt block string with budget enforcement."""
+        """Generate lightweight, conversational evidence block string with budget enforcement."""
         if not evidence:
-            ts = timestamp or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-            return (
-                f"[SEARCH RETURNED NO RESULTS]\n"
-                f"The live search returned no matching results for query: \"{query}\"\n"
-                f"Search attempted at: {ts}"
-            )
+            return ""
 
         ts = timestamp or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-        if overall_confidence == 0.0 and evidence:
-            avg_score = sum(e.score for e in evidence) / len(evidence)
-            overall_confidence = round(min(1.0, max(0.0, avg_score / 100.0)), 2)
-
-        confidence_pct = int(overall_confidence * 100)
-        overall_rating = "High" if overall_confidence >= 0.85 else ("Medium" if overall_confidence >= 0.60 else "Low")
 
         lines = [
-            "[LIVE INTERNET SEARCH RESULTS]",
-            f"Search performed: {ts}",
-            f"Confidence: {confidence_pct}% ({overall_rating})",
-            "",
-            "Verified Web Search Results:"
+            "[Context Information]",
+            "The following verified live facts are available for TODAY'S DATE to inform your response. Integrate them naturally into your conversation as ALOY without sounding formal or corporate. Never state that you cannot browse real-time information or mention knowledge cutoffs.",
+            ""
         ]
 
-        # Build evidence items
-        items_lines = []
-        for i, item in enumerate(evidence, 1):
-            items_lines.append(f"  [{i}] {item.title}")
-            if item.snippet:
-                items_lines.append(f"      Excerpt: {item.snippet}")
-            items_lines.append(f"      Source: {item.url}")
-            items_lines.append("")
+        for item in evidence:
+            snippet_str = f": {item.snippet}" if item.snippet else ""
+            lines.append(f"• {item.title}{snippet_str} (Source: {item.url})")
 
-        # Build sources section
-        sources_lines = ["Sources retrieved:"]
-        for i, item in enumerate(evidence, 1):
-            sources_lines.append(f"  {i}. {item.title} — {item.url}")
-
-        metadata_line = f"\nSearch Metadata: timestamp={ts}, confidence={overall_confidence:.2f}, sources={len(evidence)}"
-
-        # Combine into complete prompt text
-        full_block = "\n".join(lines + items_lines + sources_lines) + metadata_line
+        full_block = "\n".join(lines)
 
         # Character budget truncation if necessary
         if len(full_block) > self.max_characters:
-            full_block = self._truncate_to_budget(
-                lines, evidence, sources_lines, metadata_line, ts, overall_confidence
-            )
+            full_block = self._truncate_to_budget(lines[:3], evidence)
 
         return full_block
 
     def _truncate_to_budget(
         self,
         header_lines: List[str],
-        evidence: List[RankedEvidence],
-        sources_lines: List[str],
-        metadata_line: str,
-        timestamp: str,
-        confidence: float
+        evidence: List[RankedEvidence]
     ) -> str:
         """Progressively drop lowest-ranked evidence items until block fits under max_characters."""
         current_evidence = list(evidence)
 
         while len(current_evidence) > 1:
-            current_evidence.pop()  # Drop lowest-ranked item
+            current_evidence.pop()
 
-            items_lines = []
-            for i, item in enumerate(current_evidence, 1):
-                items_lines.append(f"  [{i}] {item.title}")
-                if item.snippet:
-                    items_lines.append(f"      Excerpt: {item.snippet}")
-                items_lines.append(f"      Source: {item.url}")
-                items_lines.append("")
+            lines = list(header_lines)
+            for item in current_evidence:
+                snippet_str = f": {item.snippet}" if item.snippet else ""
+                lines.append(f"• {item.title}{snippet_str} (Source: {item.url})")
 
-            src_lines = ["Sources retrieved:"]
-            for i, item in enumerate(current_evidence, 1):
-                src_lines.append(f"  {i}. {item.title} — {item.url}")
-
-            meta_line = f"\nSearch Metadata: timestamp={timestamp}, confidence={confidence:.2f}, sources={len(current_evidence)}"
-
-            candidate_block = "\n".join(header_lines + items_lines + src_lines) + meta_line
+            candidate_block = "\n".join(lines)
             if len(candidate_block) <= self.max_characters:
                 return candidate_block
 
-        # If still over budget with 1 item, calculate snippet truncation
+        # If still over budget with 1 item, truncate snippet
         item = current_evidence[0]
-        base_items = [
-            f"  [1] {item.title}",
-            f"      Excerpt: ",
-            f"      Source: {item.url}",
-            ""
-        ]
-        src_lines = ["Sources retrieved:", f"  1. {item.title} — {item.url}"]
-        meta_line = f"\nSearch Metadata: timestamp={timestamp}, confidence={confidence:.2f}, sources=1"
-
-        base_len = len("\n".join(header_lines + base_items + src_lines) + meta_line)
-        avail_snippet_len = max(10, self.max_characters - base_len - 5)
+        base_line = f"• {item.title} (Source: {item.url})"
+        base_len = len("\n".join(header_lines + [base_line]))
+        avail_snippet_len = max(10, self.max_characters - base_len - 15)
         truncated_snippet = item.snippet[:avail_snippet_len] + "..." if len(item.snippet) > avail_snippet_len else item.snippet
 
-        base_items[1] = f"      Excerpt: {truncated_snippet}"
+        final_line = f"• {item.title}: {truncated_snippet} (Source: {item.url})"
+        final_block = "\n".join(header_lines + [final_line])
 
-        final_block = "\n".join(header_lines + base_items + src_lines) + meta_line
         if len(final_block) > self.max_characters:
             final_block = final_block[:self.max_characters]
         return final_block

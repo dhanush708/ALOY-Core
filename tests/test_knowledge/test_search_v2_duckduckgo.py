@@ -1,12 +1,24 @@
 """
 Unit tests for ALOY Search V2 DuckDuckGo Provider (knowledge/v2/providers/duckduckgo.py).
 Network calls are 100% mocked to guarantee zero internet dependency.
+Includes complete error classification test coverage.
 """
 
 import asyncio
+import urllib.error
 import pytest
 from unittest.mock import patch, MagicMock
-from knowledge.v2.providers.duckduckgo import DuckDuckGoProvider
+
+from knowledge.v2.providers.duckduckgo import (
+    DuckDuckGoProvider,
+    ProviderOutcome,
+    ProviderExecutionError,
+    ProviderCaptchaError,
+    ProviderRateLimitError,
+    ProviderForbiddenError,
+    ProviderNetworkError,
+    ProviderParserError,
+)
 from knowledge.v2.models import NormalizedResult
 from knowledge.v2.interfaces import ISearchProvider
 
@@ -26,18 +38,21 @@ SAMPLE_DDG_PRIMARY_HTML = """
 </html>
 """
 
-SAMPLE_DDG_FALLBACK_HTML = """
+SAMPLE_DDG_NO_RESULTS_HTML = """
 <html>
 <body>
-<div class="other-format">
-    <a class="result__a" href="#">Fallback Title 1</a>
-    <a class="result__url" href="https://fallback1.org">fallback1.org</a>
-    <a class="result__snippet">Fallback Snippet 1</a>
+<div id="links_wrapper">
+    <div class="no-results">No results found for xyz123nonexistent.</div>
 </div>
-<div class="other-format">
-    <a class="result__a" href="#">Fallback Title 2</a>
-    <a class="result__url" href="https://fallback2.org">fallback2.org</a>
-    <a class="result__snippet">Fallback Snippet 2</a>
+</body>
+</html>
+"""
+
+SAMPLE_DDG_CAPTCHA_HTML = """
+<html>
+<body>
+<div class="ddg-captcha">
+    <h2>Please complete the CAPTCHA challenge below</h2>
 </div>
 </body>
 </html>
@@ -69,77 +84,82 @@ class TestDuckDuckGoProvider:
     async def test_successful_search_primary_parser(self):
         provider = DuckDuckGoProvider()
 
-        with patch.object(provider, '_parse_html') as mock_parse:
-            mock_parse.return_value = [
-                NormalizedResult(
-                    title="Python Source Code",
-                    url="https://www.python.org/",
-                    snippet="Official homepage",
-                    provider="duckduckgo"
-                )
-            ]
-            with patch("urllib.request.urlopen") as mock_urlopen:
-                mock_resp = MagicMock()
-                mock_resp.read.return_value = SAMPLE_DDG_PRIMARY_HTML.encode('utf-8')
-                mock_urlopen.return_value.__enter__.return_value = mock_resp
+        with patch("urllib.request.urlopen") as mock_urlopen:
+            mock_resp = MagicMock()
+            mock_resp.read.return_value = SAMPLE_DDG_PRIMARY_HTML.encode('utf-8')
+            mock_urlopen.return_value.__enter__.return_value = mock_resp
 
-                results = await provider.execute("python programming")
-                assert len(results) == 1
-                assert results[0].title == "Python Source Code"
-                assert results[0].url == "https://www.python.org/"
-                assert results[0].provider == "duckduckgo"
+            results = await provider.execute("python programming")
+            assert len(results) == 2
+            assert results[0].title == "Python Source Code"
+            assert results[0].url == "https://www.python.org/"
+            assert results[0].provider == "duckduckgo"
 
-    def test_parse_primary_html(self):
+    def test_genuine_no_results_handling(self):
         provider = DuckDuckGoProvider()
-        results = provider._parse_html(SAMPLE_DDG_PRIMARY_HTML, max_results=5)
+        results = provider._parse_html(SAMPLE_DDG_NO_RESULTS_HTML)
+        assert results == []
 
-        assert len(results) == 2
-        assert results[0].title == "Python Source Code"
-        assert results[0].url == "https://www.python.org/"
-        assert results[0].snippet == "Official homepage for Python programming language."
-        assert results[1].title == "GitHub - python/cpython"
-        assert results[1].url == "https://github.com/python/cpython"
-
-    def test_parse_fallback_html(self):
+    @pytest.mark.asyncio
+    async def test_captcha_detection_raises_captcha_error(self):
         provider = DuckDuckGoProvider()
-        results = provider._parse_html(SAMPLE_DDG_FALLBACK_HTML, max_results=5)
+        with pytest.raises(ProviderCaptchaError) as exc_info:
+            provider._parse_html(SAMPLE_DDG_CAPTCHA_HTML)
+        assert exc_info.value.outcome == ProviderOutcome.CAPTCHA
 
-        assert len(results) == 2
-        assert results[0].title == "Fallback Title 1"
-        assert results[0].url == "https://fallback1.org"
-        assert results[0].snippet == "Fallback Snippet 1"
+    @pytest.mark.asyncio
+    async def test_http_403_raises_forbidden_error(self):
+        provider = DuckDuckGoProvider()
+        http_err = urllib.error.HTTPError("url", 403, "Forbidden", {}, None)
 
-    def test_clean_url_uddg_redirect(self):
-        raw_uddg = "//duckduckgo.com/l/?uddg=https%3A%2F%2Fdocs.python.org%2F3%2F&rut=123"
-        cleaned = DuckDuckGoProvider._clean_url(raw_uddg)
-        assert cleaned == "https://docs.python.org/3/"
+        with patch("urllib.request.urlopen", side_effect=http_err):
+            with pytest.raises(ProviderForbiddenError) as exc_info:
+                await provider.execute("test 403")
+            assert exc_info.value.outcome == ProviderOutcome.HTTP_403
 
-        standard_url = "https://example.com/test"
-        assert DuckDuckGoProvider._clean_url(standard_url) == standard_url
+    @pytest.mark.asyncio
+    async def test_http_429_raises_rate_limit_error(self):
+        provider = DuckDuckGoProvider()
+        http_err = urllib.error.HTTPError("url", 429, "Too Many Requests", {}, None)
+
+        with patch("urllib.request.urlopen", side_effect=http_err):
+            with pytest.raises(ProviderRateLimitError) as exc_info:
+                await provider.execute("test 429")
+            assert exc_info.value.outcome == ProviderOutcome.RATE_LIMITED
+
+    @pytest.mark.asyncio
+    async def test_malformed_html_raises_parser_error(self):
+        provider = DuckDuckGoProvider()
+        malformed_html = "<html><body><div>Unexpected unstructured body</div></body></html>"
+
+        with pytest.raises(ProviderParserError) as exc_info:
+            provider._parse_html(malformed_html)
+        assert exc_info.value.outcome == ProviderOutcome.PARSER_FAILURE
 
     @pytest.mark.asyncio
     async def test_search_timeout_handling(self):
         provider = DuckDuckGoProvider(timeout_seconds=0.1)
 
-        def slow_fetch():
+        def slow_fetch(*args, **kwargs):
             import time
             time.sleep(0.5)
             return "<html></html>"
 
         with patch("urllib.request.urlopen", side_effect=slow_fetch):
-            results = await provider.execute("timeout test")
-            assert results == []
+            with pytest.raises(ProviderExecutionError) as exc_info:
+                await provider.execute("timeout test")
+            assert exc_info.value.outcome == ProviderOutcome.TIMEOUT
 
     @pytest.mark.asyncio
     async def test_network_exception_handling(self):
         provider = DuckDuckGoProvider()
 
-        with patch("urllib.request.urlopen", side_effect=Exception("Connection refused")):
-            results = await provider.execute("error test")
-            assert results == []
+        with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("Connection refused")):
+            with pytest.raises(ProviderNetworkError) as exc_info:
+                await provider.execute("error test")
+            assert exc_info.value.outcome == ProviderOutcome.NETWORK_ERROR
 
-    def test_max_results_option(self):
-        provider = DuckDuckGoProvider()
-        results = provider._parse_html(SAMPLE_DDG_PRIMARY_HTML, max_results=1)
-        assert len(results) == 1
-        assert results[0].title == "Python Source Code"
+    def test_clean_url_uddg_redirect(self):
+        raw_uddg = "//duckduckgo.com/l/?uddg=https%3A%2F%2Fdocs.python.org%2F3%2F&rut=123"
+        cleaned = DuckDuckGoProvider._clean_url(raw_uddg)
+        assert cleaned == "https://docs.python.org/3/"

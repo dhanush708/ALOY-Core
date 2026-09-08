@@ -69,7 +69,7 @@ class TestSearchV2EndToEnd:
         assert ctx.search_triggered is True
         assert ctx.search_succeeded is True
         assert ctx.results_count == 1
-        assert "[LIVE INTERNET SEARCH RESULTS]" in ctx.formatted_block
+        assert "[Context Information]" in ctx.formatted_block
         assert "https://docs.python.org/3.14/" in ctx.formatted_block
 
         metrics = get_telemetry_metrics()

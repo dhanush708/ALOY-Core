@@ -2,7 +2,7 @@ import asyncio
 import logging
 import time
 import uuid
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from kernel.interfaces.tools import IToolSystem
 from kernel.interfaces.base import HealthStatus
@@ -98,7 +98,7 @@ class ToolSystem(IToolSystem):
         
         try:
             # 3. Sandbox path validation
-            sanitized_params = self._validate_params_paths(params)
+            sanitized_params = self._validate_params_paths(params, context=context)
             
             # 4. Check permissions and request authorization
             target = self._determine_target(sanitized_params)
@@ -210,15 +210,15 @@ class ToolSystem(IToolSystem):
             ))
             raise
             
-    def _validate_params_paths(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _validate_params_paths(self, params: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Recursively validate path parameters using Sandbox."""
         sanitized = {}
         for k, v in params.items():
             if isinstance(v, dict):
-                sanitized[k] = self._validate_params_paths(v)
+                sanitized[k] = self._validate_params_paths(v, context=context)
             elif isinstance(v, list):
                 sanitized[k] = [
-                    self._validate_params_paths(item) if isinstance(item, dict) else item
+                    self._validate_params_paths(item, context=context) if isinstance(item, dict) else item
                     for item in v
                 ]
             elif isinstance(v, str):
@@ -228,7 +228,10 @@ class ToolSystem(IToolSystem):
                 if is_path_key and not is_content_key and v:
                     try:
                         # Path checking using workspace Sandbox
-                        sanitized[k] = self._sandbox.validate_path(v)
+                        check_path = v
+                        if not os.path.isabs(check_path) and context and context.get("workspace_path"):
+                            check_path = os.path.join(context["workspace_path"], check_path)
+                        sanitized[k] = self._sandbox.validate_path(check_path)
                     except ValueError as e:
                         raise PermissionError(f"Sandbox violation for path parameter '{k}': {e}") from e
                 else:

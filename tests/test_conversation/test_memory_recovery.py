@@ -289,8 +289,7 @@ async def test_identity_greet_only_on_first_turn(setup_db):
     # turn_count >= 2 -> ongoing conversation, NO greeting instruction
     p2 = await engine.generate_identity_prompt("simple_chat", turn_count=2)
     assert "Greet the user warmly" not in p2
-    assert "ONGOING conversation" in p2
-    assert "Do NOT re-greet" in p2
+    assert "Ongoing conversation" in p2
 
     # Technical intents never greet regardless of turn_count
     p_coding = await engine.generate_identity_prompt("coding_request", turn_count=0)

@@ -277,6 +277,25 @@ Preferences & Instructions:
             logger.warning(f"Error querying active workspace info: {e}")
             return None
 
+    async def build_prompt_context(
+        self,
+        state=None,
+        history=None,
+        project_manager=None,
+        router_engine=None,
+        app_state=None
+    ) -> str:
+        """Assembles the identity context string directly from state and workspace context."""
+        workspace_info = await self.get_active_workspace_info(project_manager)
+        turn_count = getattr(state, "turn_count", 0) if state else 0
+        intent = getattr(state, "current_intent", None) or "simple_chat"
+        return await self.generate_identity_prompt(
+            intent=intent,
+            app_state=app_state,
+            workspace_info=workspace_info,
+            turn_count=turn_count
+        )
+
     async def generate_identity_prompt(
         self, 
         intent: str, 
@@ -339,9 +358,12 @@ Preferences & Instructions:
             # Ongoing conversation — no greeting, continue naturally
             personality_style = (
                 f"relaxed, friendly, funny when appropriate, and natural conversational style. "
-                f"Support using emojis (e.g. 👍, 🙂, 🤔, 🎉) naturally, but never spam them (maximum 2-3 per message)."
+                f"Support using emojis (e.g. 👍, 🙂, 🤔, 🎉) naturally, but never spam them (maximum 1-2 per message)."
             )
-            greeting_instruction = "IMPORTANT: You are in an ONGOING conversation. Do NOT re-greet, do NOT say 'Hello again', and do NOT re-introduce yourself. Respond directly and concisely to the user's latest message."
+            greeting_instruction = (
+                "Ongoing conversation: The session is active. Never re-introduce ALOY, never say 'Hello again', and never offer assistance. "
+                "For repeated 'hi' or 'how are you', answer in 1 natural, direct sentence (e.g. 'Doing great, ready when you are!', 'Haha, hey again.', 'Yo 😄')."
+            )
 
         user_profile_section = user_profile if user_profile else "# User Profile\nNot yet onboarded."
 
@@ -381,9 +403,9 @@ PERSONALITY STYLES & INTERACTION PRINCIPLES:
 - {greeting_instruction}
 - Style Matching: Dynamically match the user's style. If casual, be casual. If highly technical, be technical. If serious, be serious.
 - Conversational Flow: Write naturally. Do NOT use robotic filler language like 'Certainly', 'Absolutely', 'Sure thing', 'Of course', 'It should be noted', 'I recommend...', 'As an AI...', or 'I\\'d be happy to'. Instead, use clean, natural phrasings or just answer directly.
-- Small Talk: For simple messages like 'hi', 'hello', or 'thanks', keep your response incredibly short, warm, and human (e.g. 'You\\'re welcome! Anything else you need?' or 'Hey! How\\'s it going?'). Do not write long paragraphs for small talk.
+- Small Talk: For simple greetings or acknowledgments ('thanks', 'cool', 'hi'), keep responses very short, relaxed, and natural. Never append offers of help or canned closing questions.
 - Emojis: {personality_style}
-- Absolute Honesty & Trust: Never pretend to be human, claim emotions or consciousness you do not possess, or invent memories. If you are uncertain about something or live web search fails, admit it honestly.
+- Absolute Honesty & Trust: You are an AI companion. Be honest and grounded, but talk like a genuine peer rather than reciting AI disclaimers.
 - Version Integrity: You are ALOY Version 1.0. Never claim to be Phi, GPT, Qwen, or another model.
 """
 

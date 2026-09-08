@@ -1,84 +1,76 @@
 @echo off
 REM ============================================================
-REM  ALOY — Windows Build Script
+REM  ALOY — Windows Automated Build & Installer Generator
 REM  Produces: dist/ALOY/ (PyInstaller bundle)
-REM            dist/installer/ALOY-Setup-1.0.1.exe (Inno Setup)
-REM
-REM  Prerequisites:
-REM    pip install pyinstaller
-REM    Inno Setup 6+ installed from https://jrsoftware.org/isinfo.php
+REM            dist/installer/ALOY-Setup-1.0.0.exe (Inno Setup)
 REM ============================================================
 
 echo.
 echo  ==========================================
-echo   ALOY Build System — Windows Release
-echo   Version 1.0.1
+echo   ALOY Windows Release Build System
+echo   Version 1.0.0
 echo  ==========================================
 echo.
 
 REM Step 1: Clean previous build artifacts
-echo [1/5] Cleaning previous build artifacts...
+echo [1/4] Cleaning previous build artifacts...
 if exist "build" rmdir /s /q "build"
 if exist "dist\ALOY" rmdir /s /q "dist\ALOY"
+if exist "dist\installer" rmdir /s /q "dist\installer"
 echo       Done.
 
-REM Step 2: Install / verify dependencies
-echo [2/5] Verifying Python dependencies...
-pip install -r requirements.txt --quiet
-if %errorlevel% neq 0 (
-    echo ERROR: pip install failed. Ensure Python 3.11+ is on PATH.
-    exit /b 1
-)
-echo       Done.
-
-REM Step 3: Convert PNG icon to ICO (requires Pillow)
-echo [3/5] Converting icon PNG to ICO format...
-pip install pillow --quiet
-python -c "from PIL import Image; img = Image.open('assets/icons/aloy.png'); img.save('assets/icons/aloy.ico', format='ICO', sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)]); print('  Icon converted successfully.')"
-if %errorlevel% neq 0 (
-    echo WARNING: Icon conversion failed. Continuing without .ico file.
-)
-
-REM Step 4: Run PyInstaller
-echo [4/5] Building application with PyInstaller...
+REM Step 2: Run PyInstaller Build
+echo [2/4] Building standalone executable bundle with PyInstaller...
 pyinstaller --noconfirm installer/aloy.spec
 if %errorlevel% neq 0 (
     echo ERROR: PyInstaller build failed.
     exit /b 1
 )
-echo       Done. Output: dist\ALOY\
+echo       Done. Executable ready at dist\ALOY\ALOY.exe
 
-REM Step 5: Build Inno Setup installer (if ISCC is available)
-echo [5/5] Building Windows installer with Inno Setup...
-set "ISCC_PATH=%LOCALAPPDATA%\Programs\Antigravity IDE\resources\app\node_modules\innosetup\bin\ISCC.exe"
-if exist "%ISCC_PATH%" (
-    "%ISCC_PATH%" "installer/aloy.iss"
+REM Step 3: Run Executable Bundle Verification
+echo [3/4] Running production executable verification...
+python installer/verify_production.py dist/ALOY
+if %errorlevel% neq 0 (
+    echo ERROR: Production verification failed.
+    exit /b 1
+)
+echo       Done. Verification successful.
+
+REM Step 4: Build Inno Setup installer
+echo [4/4] Building Windows installer with Inno Setup (ISCC)...
+set "ISCC_EXE=C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+if not exist "%ISCC_EXE%" (
+    set "ISCC_EXE=C:\Users\%USERNAME%\AppData\Local\Programs\Antigravity IDE\resources\app\node_modules\innosetup\bin\ISCC.exe"
+)
+
+if exist "%ISCC_EXE%" (
+    "%ISCC_EXE%" "installer/aloy.iss"
     if %errorlevel% neq 0 (
-        echo WARNING: Inno Setup build failed. Check installer/aloy.iss
-    ) else (
-        echo       Done. Output: dist\installer\ALOY-Setup-1.0.1.exe
+        echo ERROR: Inno Setup build failed. Check installer/aloy.iss
+        exit /b 1
     )
+    echo       Done. Installer generated at dist\installer\ALOY-Setup-1.0.0.exe
 ) else (
     where ISCC.exe >nul 2>&1
     if %errorlevel% equ 0 (
         ISCC.exe "installer/aloy.iss"
         if %errorlevel% neq 0 (
-            echo WARNING: Inno Setup build failed. Check installer/aloy.iss
-        ) else (
-            echo       Done. Output: dist\installer\ALOY-Setup-1.0.1.exe
+            echo ERROR: Inno Setup build failed. Check installer/aloy.iss
+            exit /b 1
         )
+        echo       Done. Installer generated at dist\installer\ALOY-Setup-1.0.0.exe
     ) else (
-        echo WARNING: ISCC.exe not found. Skipping installer creation.
-        echo          Download Inno Setup from https://jrsoftware.org/isinfo.php
-        echo          Then re-run this script to generate the .exe installer.
+        echo ERROR: ISCC.exe not found on system.
+        exit /b 1
     )
 )
 
 echo.
 echo  ==========================================
-echo   Build complete!
+echo   BUILD COMPLETE & VERIFIED!
 echo.
-echo   Portable bundle : dist\ALOY\ALOY.exe
-echo   Installer       : dist\installer\ALOY-Setup-1.0.1.exe
+echo   Executable Bundle : dist\ALOY\ALOY.exe
+echo   Windows Installer : dist\installer\ALOY-Setup-1.0.0.exe
 echo  ==========================================
 echo.

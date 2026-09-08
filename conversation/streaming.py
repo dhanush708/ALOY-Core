@@ -20,8 +20,16 @@ async def sse_stream_handler(
         context = context_or_task
         search_triggered = getattr(context, "search_triggered", False)
         search_succeeded = getattr(context, "search_succeeded", False)
-        search_status = "success" if (search_triggered and search_succeeded) else "local"
-        if search_triggered and not search_succeeded:
+        result_count = getattr(context, "search_result_count", 0)
+        failure_reason = getattr(context, "search_failure_reason", "")
+
+        if not search_triggered:
+            search_status = "local"
+        elif search_succeeded and result_count > 0:
+            search_status = "success"
+        elif failure_reason == "no_results" or (search_succeeded and result_count == 0):
+            search_status = "no_results"
+        else:
             search_status = "failed"
 
         yield f"data: {json.dumps({'type': 'meta', 'intent': context.intent, 'model': context.model, 'search_status': search_status})}\n\n"
@@ -46,7 +54,7 @@ async def sse_stream_handler(
             try:
                 metadata = {"search_status": search_status}
                 # Persist source metadata for follow-up continuity and UI badge display
-                if search_triggered and search_succeeded:
+                if search_status == "success":
                     metadata["search_sources"] = getattr(context, "search_sources", [])
                     metadata["search_confidence"] = getattr(context, "search_confidence", 0.0)
                     metadata["search_timestamp"] = getattr(context, "search_timestamp", "")
@@ -94,13 +102,21 @@ async def sse_stream_handler(
                     if context:
                         search_triggered = getattr(context, "search_triggered", False)
                         search_succeeded = getattr(context, "search_succeeded", False)
-                        if search_triggered:
-                            status = "success" if search_succeeded else "failed"
-                        else:
+                        result_count = getattr(context, "search_result_count", 0)
+                        failure_reason = getattr(context, "search_failure_reason", "")
+
+                        if not search_triggered:
                             status = "local"
+                        elif search_succeeded and result_count > 0:
+                            status = "success"
+                        elif failure_reason == "no_results" or (search_succeeded and result_count == 0):
+                            status = "no_results"
+                        else:
+                            status = "failed"
+
                         metadata["search_status"] = status
                         # Persist full source metadata for follow-up continuity
-                        if search_triggered and search_succeeded:
+                        if status == "success":
                             metadata["search_sources"] = getattr(context, "search_sources", [])
                             metadata["search_confidence"] = getattr(context, "search_confidence", 0.0)
                             metadata["search_timestamp"] = getattr(context, "search_timestamp", "")

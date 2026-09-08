@@ -1,68 +1,70 @@
 # -*- mode: python ; coding: utf-8 -*-
-# ALOY — PyInstaller Spec File
-# Run: pyinstaller --noconfirm installer/aloy.spec
+# ALOY — Production PyInstaller Spec File (Phase 3 Specification)
+# Build command: pyinstaller --noconfirm installer/aloy.spec
 
 import os
+import sys
 from PyInstaller.utils.hooks import copy_metadata
 
 block_cipher = None
 
-# All Python packages to include
+# Root directory of the repository
+ROOT_DIR = os.path.abspath(os.path.join(SPECPATH, '..'))
+
+# sqlite-vec DLL extension lookup
 import sqlite_vec
 sqlite_vec_dir = os.path.dirname(sqlite_vec.__file__)
+sqlite_vec_dll = os.path.join(sqlite_vec_dir, 'vec0.dll')
 
+# Bundled data files (Source Path, Target Directory in _MEIPASS)
 added_files = [
-    # Frontend SPA
-    ('../static', 'static'),
-    # Database migrations (SQL files)
-    ('../database/migrations', 'database/migrations'),
-    # Configuration
-    ('../config', 'config'),
-    # Application icon
-    ('../assets', 'assets'),
-    # Documentation
-    ('../docs', 'docs'),
-    # License
-    ('../LICENSE', '.'),
-    ('../README.md', '.'),
-    # sqlite-vec DLL extension
-    (os.path.join(sqlite_vec_dir, 'vec0.dll'), 'sqlite_vec'),
+    (os.path.join(ROOT_DIR, 'static'), 'static'),
+    (os.path.join(ROOT_DIR, 'config'), 'config'),
+    (os.path.join(ROOT_DIR, 'assets'), 'assets'),
+    (os.path.join(ROOT_DIR, 'database', 'migrations'), 'database/migrations'),
+    (os.path.join(ROOT_DIR, 'docs'), 'docs'),
+    (os.path.join(ROOT_DIR, 'LICENSE'), '.'),
+    (os.path.join(ROOT_DIR, 'README.md'), '.'),
 ]
+
+if os.path.exists(sqlite_vec_dll):
+    added_files.append((sqlite_vec_dll, 'sqlite_vec'))
+
 added_files += copy_metadata('email-validator')
 added_files += copy_metadata('pydantic')
 
+# Complete production hidden imports list
 hidden_imports = [
-    # FastAPI & ASGI
+    # FastAPI & ASGI Web Engine
     'fastapi', 'uvicorn', 'uvicorn.main', 'uvicorn.config',
     'uvicorn.lifespan.on', 'uvicorn.protocols.http.h11_impl',
     'uvicorn.protocols.websockets.websockets_impl',
     'starlette', 'starlette.middleware', 'starlette.staticfiles',
-    # Pydantic
+    # Pydantic & Validation
     'pydantic', 'pydantic_settings', 'email_validator',
-    # Async
-    'asyncio', 'aiofiles', 'aiohttp', 'websockets',
-    # Data
-    'sqlite3', 'json', 'yaml',
-    # Network
-    'httpx', 'httpx._transports.default',
-    # System
-    'psutil', 'psutil._pswindows',
-    # SSE
-    'sse_starlette',
-    # Tokenizer + encoding registry (MUST include tiktoken_ext to register encodings)
+    # Async & Networking
+    'asyncio', 'aiofiles', 'aiohttp', 'websockets', 'httpx', 'httpx._transports.default',
+    # SQLite & Vector Search
+    'sqlite3', 'sqlite_vec', 'json', 'yaml',
+    # System & Telemetry
+    'psutil', 'psutil._pswindows', 'sse_starlette',
+    # Tokenizer & Token Encoding Engine
     'tiktoken', 'tiktoken_ext', 'tiktoken_ext.openai_public',
-    # SQLite extension
-    'sqlite_vec',
-    # App modules
-    'api', 'api.server', 'api.routes',
+    # ALOY Application Core Packages
+    'kernel', 'kernel.path_manager', 'kernel.boot', 'kernel.event_bus', 'kernel.telemetry', 'kernel.prompts',
+    'api', 'api.server', 'api.routes', 'api.schemas',
     'models', 'models.config', 'models.router', 'models.ollama_client',
     'memory', 'memory.manager',
-    'identity', 'identity.engine', 'identity.metadata',
-    'kernel', 'kernel.boot', 'kernel.event_bus',
+    'identity', 'identity.engine', 'identity.profile', 'identity.integrity',
     'database', 'database.connection', 'database.migrator',
     'agent', 'agent.runtime',
-    'conversation', 'conversation.engine',
-    'knowledge', 'learning', 'reasoning',
+    'conversation', 'conversation.engine', 'conversation.pipeline', 'conversation.context_builder',
+    'knowledge', 'knowledge.v2', 'knowledge.v2.models', 'knowledge.v2.interfaces',
+    'knowledge.v2.providers.registry', 'knowledge.v2.providers.duckduckgo',
+    'knowledge.v2.retrieval_layer', 'knowledge.v2.relevance_engine',
+    'knowledge.v2.context_assembler', 'knowledge.v2.decision_engine',
+    'knowledge.v2.query_planner', 'knowledge.v2.search_pipeline', 'knowledge.v2.integration',
+    'learning', 'reasoning',
     'security', 'security.confirmation',
     'evolution', 'evolution.service',
     'tools', 'tools.registry', 'tools.system',
@@ -70,52 +72,24 @@ hidden_imports = [
 ]
 
 a = Analysis(
-    ['../run.py'],
-    pathex=['.'],
+    [os.path.join(ROOT_DIR, 'run.py')],
+    pathex=[ROOT_DIR],
     binaries=[],
     datas=added_files,
     hiddenimports=hidden_imports,
-    hookspath=['installer/hooks'],
+    hookspath=[os.path.join(SPECPATH, 'hooks')],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=[os.path.join(SPECPATH, 'rthook_aloy.py')],
     excludes=[
-        # GUI toolkits (ALOY is browser-based — no desktop GUI needed)
         'tkinter', '_tkinter',
-        # Game engine (not used)
         'pygame', 'pygame._sdl2',
-        # Local ML/DL frameworks (ALOY delegates all inference to Ollama)
         'torch', 'torchvision', 'torchaudio',
-        'tensorflow', 'tensorflow_core', 'tensorflow_estimator',
-        'keras',
-        'transformers',
-        'onnxruntime',
-        'onnx',
-        # Scientific computing (not used)
-        'numpy', 'scipy',
-        'sklearn', 'scikit_learn',
-        'pandas',
-        'matplotlib', 'mpl_toolkits',
-        'numba', 'llvmlite',
-        # NLP toolkits (ALOY uses tiktoken/Ollama — not these)
-        'spacy', 'thinc', 'blis', 'cymem', 'preshed', 'srsly',
-        'nltk',
-        # Image processing (not used in server)
-        'PIL', 'cv2',
-        # Cloud storage SDKs (not used)
-        'boto3', 'botocore', 's3transfer',
-        'google.cloud', 'google_cloud_storage',
-        # Big data / serialization (not used)
-        'pyarrow', 'h5py', 'lmdb', 'msgpack',
-        'ml_dtypes',
-        # AV/media codecs (not used)
-        'av',
-        # Protobuf tooling (gRPC generated code — not needed at runtime)
-        'grpc_tools',
-        # Testing frameworks (never ship test deps)
+        'tensorflow', 'keras',
+        'transformers', 'onnxruntime', 'onnx',
+        'numpy', 'scipy', 'sklearn', 'pandas', 'matplotlib',
+        'spacy', 'nltk', 'PIL', 'cv2',
+        'boto3', 'botocore', 'google.cloud',
         'pytest', 'pytest_asyncio',
-        # Misc unused
-        'tensorboard',
-        'optree',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -135,14 +109,14 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,  # No terminal window — pure GUI app
+    console=False,  # Windowed desktop application (no console)
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=os.path.abspath(os.path.join(SPECPATH, '..', 'assets', 'icons', 'aloy.ico')),
-    version='version_info.txt',
+    icon=os.path.abspath(os.path.join(ROOT_DIR, 'assets', 'icons', 'aloy.ico')),
+    version=os.path.join(SPECPATH, 'version_info.txt'),
 )
 
 coll = COLLECT(

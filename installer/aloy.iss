@@ -1,118 +1,79 @@
-; ALOY — Inno Setup Installer Script
-; Version: 1.0.0
-; Author: Dhanush A.
-; Website: https://github.com/dhanush708/aloy
-;
-; Prerequisites:
-;   1. Inno Setup 6+ from https://jrsoftware.org/isinfo.php
-;   2. Run build_windows.bat first to produce dist/ALOY/
-;   3. Run: ISCC.exe installer/aloy.iss
+; =====================================================================
+; ALOY — Inno Setup Production Windows Installer Script
+; Produces: dist/installer/ALOY-Setup-1.0.0.exe
+; AppID: {{A90F8C72-8812-4B3B-9A4E-7C12F8B701D2}
+; =====================================================================
 
-#define AppName "ALOY"
-#define AppVersion "1.0.1"
-#define AppPublisher "Dhanush A."
-#define AppURL "https://github.com/dhanush708/aloy"
-#define AppExeName "ALOY.exe"
-#define AppDescription "Local-First Personal AI Companion"
+#define MyAppName "ALOY"
+#define MyAppVersion "1.0.0"
+#define MyAppPublisher "Dhanush Anbu"
+#define MyAppURL "https://github.com/dhanush708/ALOY-Core"
+#define MyAppExeName "ALOY.exe"
+#define MyAppId "{{A90F8C72-8812-4B3B-9A4E-7C12F8B701D2}"
 
 [Setup]
-; Basic metadata
-AppId={{A10Y-AI-COMPANION-V1-2026}
-AppName={#AppName}
-AppVersion={#AppVersion}
-AppVerName={#AppName} {#AppVersion}
-AppPublisher={#AppPublisher}
-AppPublisherURL={#AppURL}
-AppSupportURL={#AppURL}/issues
-AppUpdatesURL={#AppURL}/releases
-
-; Install location
-DefaultDirName={autopf}\{#AppName}
-DefaultGroupName={#AppName}
+AppId={#MyAppId}
+AppName={#MyAppName}
+AppVersion={#MyAppVersion}
+AppVerName={#MyAppName} {#MyAppVersion}
+AppPublisher={#MyAppPublisher}
+AppPublisherURL={#MyAppURL}
+AppSupportURL={#MyAppURL}
+AppUpdatesURL={#MyAppURL}
+DefaultDirName={autopf}\{#MyAppName}
+DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
-DisableProgramGroupPage=no
-
-; Output
+LicenseFile=..\LICENSE
 OutputDir=..\dist\installer
-OutputBaseFilename=ALOY-Setup-{#AppVersion}
+OutputBaseFilename=ALOY-Setup-1.0.0
 SetupIconFile=..\assets\icons\aloy.ico
-Compression=lzma2/ultra64
+WizardImageFile=..\assets\icons\aloy_wizard_large.bmp
+WizardSmallImageFile=..\assets\icons\aloy_wizard_small.bmp
+Compression=lzma2/max
 SolidCompression=yes
-
-; UI styling
 WizardStyle=modern
-WizardSizePercent=120
-ShowLanguageDialog=no
-UninstallDisplayName={#AppName}
-UninstallDisplayIcon={app}\{#AppExeName}
-
-; Windows requirements
-MinVersion=10.0
-ArchitecturesAllowed=x64
+UninstallDisplayIcon={app}\{#MyAppExeName}
 ArchitecturesInstallIn64BitMode=x64
-PrivilegesRequiredOverridesAllowed=dialog
-
-; Signing (fill in if you have a code signing certificate)
-;SignTool=signtool
-;SignedUninstaller=yes
+PrivilegesRequiredOverridesAllowed=commandline dialog
+DisableProgramGroupPage=yes
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "startmenuicon"; Description: "Add to Start Menu"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
-; Main application (from PyInstaller dist)
-Source: "..\dist\ALOY\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Main Executable Binary
+Source: "..\dist\ALOY\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+; Bundled Runtime Dependencies
+Source: "..\dist\ALOY\_internal\*"; DestDir: "{app}\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs
+; License & Documentation
+Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-; Start menu shortcut
-Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\_internal\assets\icons\aloy.ico"; Comment: "{#AppDescription}"
-Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
-
-; Desktop shortcut (if selected)
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\_internal\assets\icons\aloy.ico"; Comment: "{#AppDescription}"; Tasks: desktopicon
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\_internal\assets\icons\aloy.ico"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\_internal\assets\icons\aloy.ico"; Tasks: desktopicon
 
 [Run]
-; Open ALOY after setup completes
-Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(AppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
-
-; Add Windows Firewall exception for ALOY server (port 8000 — localhost only)
-Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""ALOY Local Server"" dir=in action=allow protocol=TCP localport=8000 remoteip=127.0.0.1"; StatusMsg: "Configuring firewall..."; Flags: runhidden
-
-[UninstallDelete]
-; Clean up data folder on uninstall (optional — warn user first)
-; Type: filesandordirs; Name: "{app}\data"
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
 [Code]
-// Check for minimum Windows 10 version
-function InitializeSetup(): Boolean;
+// Custom Pascal Script to handle optional user data cleanup on Uninstall
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
-  Version: TWindowsVersion;
+  AppDataDir: String;
 begin
-  GetWindowsVersionEx(Version);
-  if Version.Major < 10 then begin
-    MsgBox('ALOY requires Windows 10 or later.', mbCriticalError, MB_OK);
-    Result := False;
-  end else
-    Result := True;
-end;
-
-// After installation completes, prompt the user to download Ollama
-procedure CurStepChanged(CurStep: TSetupStep);
-var
-  ErrorCode: Integer;
-begin
-  if CurStep = ssPostInstall then begin
-    if MsgBox(
-      'ALOY requires Ollama to run AI models locally.' + #13#10 + #13#10 +
-      'Ollama is free, open-source, and takes about 2 minutes to install.' + #13#10 + #13#10 +
-      'Download Ollama now? (Recommended)',
-      mbConfirmation, MB_YESNO
-    ) = IDYES then begin
-      ShellExec('open', 'https://ollama.com/download/windows', '', '', SW_SHOW, ewNoWait, ErrorCode);
+  if CurUninstallStep = usPostUninstall then
+  begin
+    AppDataDir := ExpandConstant('{userlocalappdata}\ALOY');
+    if DirExists(AppDataDir) then
+    begin
+      if MsgBox('Do you also want to delete all personal user data (conversations, memories, database, logs, and settings) stored in %LOCALAPPDATA%\ALOY\?' + #13#10 + #13#10 + 'Click No to preserve your data for future reinstalls.', mbConfirmation, MB_YESNO) = IDYES then
+      begin
+        DelTree(AppDataDir, True, True, True);
+      end;
     end;
   end;
 end;
